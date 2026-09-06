@@ -120,7 +120,39 @@ CREATE TABLE IF NOT EXISTS students (
   adm        TEXT NOT NULL UNIQUE,
   full_name  TEXT NOT NULL,
   class_id   INTEGER REFERENCES classes(id) ON DELETE SET NULL,
+  status     TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','graduated')),
+  graduated_at TIMESTAMPTZ,
+  graduation_year INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Additive migration for databases created before lifecycle tracking existed.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS graduated_at TIMESTAMPTZ;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS graduation_year INTEGER;
+
+-- Student placement history. Never delete these rows when a student is
+-- promoted or graduated; reports for previous years use this history.
+CREATE TABLE IF NOT EXISTS student_enrollments (
+  id          SERIAL PRIMARY KEY,
+  student_id  INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  class_id    INTEGER REFERENCES classes(id) ON DELETE SET NULL,
+  year_id     INTEGER REFERENCES academic_years(id) ON DELETE SET NULL,
+  status      TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','graduated')),
+  started_at  TIMESTAMPTZ DEFAULT NOW(),
+  ended_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_student ON student_enrollments(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_year_class ON student_enrollments(year_id, class_id);
+ALTER TABLE student_enrollments DROP CONSTRAINT IF EXISTS student_enrollments_student_id_year_id_key;
+
+-- Backfill the current placement for existing students without changing marks.
+INSERT INTO student_enrollments (student_id, class_id, year_id, status)
+SELECT s.id, s.class_id, c.year_id, CASE WHEN s.status='graduated' THEN 'graduated' ELSE 'active' END
+FROM students s JOIN classes c ON c.id=s.class_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM student_enrollments e WHERE e.student_id=s.id AND e.year_id=c.year_id
 );
 
 -- -----------------------------------------------------------------

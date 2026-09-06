@@ -45,6 +45,9 @@
   .legend .sw { width:14px; height:14px; border-radius:3px; }
   .footer-note { font-size:11px; color:#777; margin-top:18px; text-align:center; }
   .holidays { font-size:11px; color:#555; margin-top:6px; text-align:center; }
+  .report-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+  .report-tab { border:1px solid var(--border); background:#f8fafc; color:var(--muted); cursor:pointer; padding:9px 13px; border-radius:7px; font-weight:700; font-size:13px; }
+  .report-tab.active { background:var(--primary); border-color:var(--primary); color:#fff; }
   @media print { .a4 { box-shadow:none; } body { background:#fff; } .report-controls { display:none; } }
 </style>
 </head>
@@ -60,12 +63,15 @@
   <p class="text-muted text-small" style="margin:0 0 18px">Generate an A4 printable report for a student — single exam, term average, or year-end average.</p>
 
   <div class="card report-controls">
+    <div class="report-tabs" role="tablist" aria-label="Report type">
+      <button type="button" class="report-tab active" data-mode="single">Current Exam</button>
+      <button type="button" class="report-tab" data-mode="term_avg">Term Average</button>
+      <button type="button" class="report-tab" data-mode="year_end">Year Average</button>
+    </div>
     <div class="filter-bar">
       <div class="field"><label>Student</label><select id="selStudent"></select></div>
-      <div class="field"><label>Report mode</label>
-        <select id="selMode"><option value="single">Single exam</option><option value="term_avg">Term average</option><option value="year_end">Year-end average</option></select></div>
       <div class="field" id="examField"><label>Exam</label><select id="selExam"></select></div>
-      <div class="field" id="termField" style="display:none"><label>Term</label><select id="selTerm"><option value="1">Term 1</option><option value="2">Term 2</option><option value="3">Term 3</option></select></div>
+      <div class="field" id="termField" style="display:none"><label>Term average</label><select id="selTerm"></select></div>
       <button class="btn btn-primary" id="genBtn">Generate</button>
       <button class="btn btn-secondary" id="printBtn">🖨 Print report</button>
     </div>
@@ -84,7 +90,13 @@ async function loadMeta(selStudent) {
 
 async function init() {
   const [students, exams, classes] = await Promise.all([App.api('/api/students'), App.api('/api/exams'), App.api('/api/classes')]);
-  document.getElementById('selExam').innerHTML = exams.exams.map(e => `<option value="${e.id}">${App.escapeHtml(e.label)}</option>`).join('');
+  const orderedExams = exams.exams || [];
+  document.getElementById('selExam').innerHTML = orderedExams.map(e => `<option value="${e.id}" data-term="${e.term_number}">${App.escapeHtml(e.label)}${e.is_active ? ' (Current)' : ''}</option>`).join('');
+  const currentExam = orderedExams.find((e) => e.is_active) || orderedExams[orderedExams.length - 1];
+  if (currentExam) document.getElementById('selExam').value = currentExam.id;
+  const termNumbers = [...new Set(orderedExams.map((e) => Number(e.term_number)).filter(Boolean))].sort((a, b) => a - b);
+  document.getElementById('selTerm').innerHTML = termNumbers.map((n) => `<option value="${n}">Term ${n} (Mid + End)</option>`).join('');
+  if (currentExam) document.getElementById('selTerm').value = currentExam.term_number;
   const studSel = document.getElementById('selStudent');
   // group students by class
   const byClass = {};
@@ -95,10 +107,17 @@ async function init() {
   }
   studSel.innerHTML = opts;
 
-  document.getElementById('selMode').addEventListener('change', (e) => {
-    const m = e.target.value;
+  document.querySelectorAll('.report-tab').forEach((tab) => tab.addEventListener('click', () => {
+    const m = tab.dataset.mode;
+    document.querySelectorAll('.report-tab').forEach((item) => item.classList.toggle('active', item === tab));
     document.getElementById('examField').style.display = m==='single' ? 'flex':'none';
     document.getElementById('termField').style.display = m==='term_avg' ? 'flex':'none';
+    document.getElementById('yearField')?.style.setProperty('display', m === 'year_end' ? 'block' : 'none');
+    if (document.getElementById('selStudent').value) generate();
+  }));
+  document.getElementById('selExam').addEventListener('change', () => {
+    const term = document.querySelector('#selExam option:checked')?.dataset.term;
+    if (term) document.getElementById('selTerm').value = term;
   });
   document.getElementById('genBtn').addEventListener('click', generate);
   document.getElementById('printBtn').addEventListener('click', () => window.print());
@@ -106,7 +125,7 @@ async function init() {
 
 async function generate() {
   const studentId = document.getElementById('selStudent').value;
-  const mode = document.getElementById('selMode').value;
+  const mode = document.querySelector('.report-tab.active')?.dataset.mode || 'single';
   if (!studentId) return App.toast('Choose a student','warn');
   let qs = `mode=${mode}`;
   if (mode === 'single') qs += `&exam_id=${document.getElementById('selExam').value}`;

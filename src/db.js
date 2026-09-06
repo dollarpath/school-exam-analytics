@@ -24,7 +24,15 @@ if (DATABASE_URL) {
     .replace(
       "display_name TEXT GENERATED ALWAYS AS\n    (CASE WHEN stream IS NOT NULL AND stream <> '' THEN name || ' ' || stream ELSE name END) STORED,",
       'display_name TEXT,'
-    );
+    )
+    .replace(`-- Backfill the current placement for existing students without changing marks.
+INSERT INTO student_enrollments (student_id, class_id, year_id, status)
+SELECT s.id, s.class_id, c.year_id, CASE WHEN s.status='graduated' THEN 'graduated' ELSE 'active' END
+FROM students s JOIN classes c ON c.id=s.class_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM student_enrollments e WHERE e.student_id=s.id AND e.year_id=c.year_id
+);
+`, '');
   localDb.public.none(schema);
   localDb.public.none(`
     INSERT INTO school (name, motto, setup_complete)

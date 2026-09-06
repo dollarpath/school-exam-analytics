@@ -427,11 +427,12 @@ function teacherModal(c, t, subjects, classes) {
     });
   }));
 
-  c.querySelector('#tf_save').addEventListener('click', async () => {
-    const body = { full_name: document.getElementById('tf_name').value, username: document.getElementById('tf_user').value,
-      password: document.getElementById('tf_pass').value,
-      max_periods: Number(document.getElementById('tf_max').value)||30,
-      is_hoi: document.getElementById('tf_hoi').checked,
+  document.querySelector('.modal-backdrop #tf_save').addEventListener('click', async () => {
+    const modal = document.querySelector('.modal-backdrop');
+    const body = { full_name: modal.querySelector('#tf_name').value, username: modal.querySelector('#tf_user').value,
+      password: modal.querySelector('#tf_pass').value,
+      max_periods: Number(modal.querySelector('#tf_max').value)||30,
+      is_hoi: modal.querySelector('#tf_hoi').checked,
       subjects: [...chosenSubs],
       classes: [...chosenCls].map(id => ({ id, is_class_teacher: chosenCT===id })),
     };
@@ -454,13 +455,20 @@ async function renderStudents(c) {
       <select id="ns_class" style="max-width:200px">${classOpts}</select>
       <button class="btn btn-secondary btn-sm" id="addStudent">+ Add</button>
     </div>
+    <div class="flex mb-1">
+      <select id="sourceClass" style="max-width:220px"><option value="">Choose whole class...</option>${classOpts}</select>
+      <select id="promoteClass" style="max-width:220px"><option value="">Promote whole class to...</option>${classOpts}</select>
+      <input id="graduationYear" type="number" value="${new Date().getFullYear()}" min="2000" max="2100" style="max-width:110px" aria-label="Graduation year">
+      <button class="btn btn-primary btn-sm" id="promoteStudents">Promote whole class</button>
+      <button class="btn btn-danger btn-sm" id="graduateStudents">Graduate whole class</button>
+    </div>
     <div class="flex mb-2">
       <a class="btn btn-ghost btn-sm" onclick="dlCsv()">⬇ Template</a>
       <button class="btn btn-outline btn-sm" id="csvBtn">Import CSV</button>
       <input type="file" id="csvFile" accept=".csv" class="hidden" style="display:none">
     </div>
-    <div class="table-wrap"><table class="data-table"><thead><tr><th>ADM</th><th>Name</th><th>Class</th><th class="no-print">Actions</th></tr></thead><tbody>
-      ${students.map(s => `<tr><td><strong>${App.escapeHtml(s.adm)}</strong></td><td>${App.escapeHtml(s.full_name)}</td><td>${s.class ? App.escapeHtml(s.class) : '<span class="badge badge-warning">No class</span>'}</td>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>ADM</th><th>Name</th><th>Class</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>
+      ${students.map(s => `<tr><td><strong>${App.escapeHtml(s.adm)}</strong></td><td>${App.escapeHtml(s.full_name)}</td><td>${s.class ? App.escapeHtml(s.class) : '<span class="badge badge-warning">No class</span>'}</td><td>${s.status === 'graduated' ? `<span class="badge badge-info">Graduated ${s.graduation_year || ''}</span>` : '<span class="badge badge-success">Active</span>'}</td>
         <td class="no-print"><button class="btn btn-danger btn-sm" data-del="${s.id}" data-name="${App.escapeHtml(s.full_name)}">Delete</button></td></tr>`).join('')}
     </tbody></table></div></div>`;
   c.innerHTML = html;
@@ -469,6 +477,25 @@ async function renderStudents(c) {
     if (!adm || !name) return App.toast('Enter ADM and name','warn');
     await App.api('/api/students', { method:'POST', body:{ adm, name, class_id: Number(c.querySelector('#ns_class').value)||null } });
     App.toast('Student added'); renderStudents(c);
+  });
+  c.querySelector('#promoteStudents').addEventListener('click', async () => {
+    const class_id = Number(c.querySelector('#sourceClass').value);
+    const target_class_id = Number(c.querySelector('#promoteClass').value);
+    if (!class_id) return App.toast('Choose the whole class to promote', 'warn');
+    if (!target_class_id) return App.toast('Choose a target class', 'warn');
+    if (class_id === target_class_id) return App.toast('Source and target classes must differ', 'warn');
+    const result = await App.api('/api/students/promote', { method:'POST', body:{ class_id, target_class_id } });
+    App.toast(`${result.promoted} student${result.promoted === 1 ? '' : 's'} promoted`); renderStudents(c);
+  });
+  c.querySelector('#graduateStudents').addEventListener('click', async () => {
+    const class_id = Number(c.querySelector('#sourceClass').value);
+    if (!class_id) return App.toast('Choose the whole class to graduate', 'warn');
+    const graduation_year = Number(c.querySelector('#graduationYear').value);
+    const className = c.querySelector('#sourceClass option:checked').textContent;
+    App.confirmDialog(`Graduate the whole class ${className}? Their previous marks will remain available.`, async () => {
+      const result = await App.api('/api/students/graduate', { method:'POST', body:{ class_id, graduation_year } });
+      App.toast(`${result.graduated} student${result.graduated === 1 ? '' : 's'} graduated`); renderStudents(c);
+    });
   });
   c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete student ${b.dataset.name}?`, async () => {
     await App.api('/api/students/'+b.dataset.del, { method:'DELETE' }); App.toast('Student deleted'); renderStudents(c); })));

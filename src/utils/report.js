@@ -92,6 +92,20 @@ async function buildReport(studentId, opts) {
 
   const yearRes = await pool.query('SELECT id FROM academic_years WHERE year=$1', [year]);
   const yearId = yearRes.rows[0] ? yearRes.rows[0].id : null;
+  if (yearId) {
+    const enrollmentRes = await pool.query(
+      `SELECT se.class_id, c.display_name AS class_name
+       FROM student_enrollments se
+       LEFT JOIN classes c ON c.id=se.class_id
+       WHERE se.student_id=$1 AND se.year_id=$2
+       ORDER BY se.id DESC LIMIT 1`,
+      [studentId, yearId]
+    );
+    if (enrollmentRes.rows[0]) {
+      student.class_id = enrollmentRes.rows[0].class_id;
+      student.class_name = enrollmentRes.rows[0].class_name;
+    }
+  }
   const termRes = await pool.query('SELECT * FROM terms WHERE year_id=$1 ORDER BY number', [yearId]);
   const terms = termRes.rows;
 
@@ -105,6 +119,12 @@ async function buildReport(studentId, opts) {
   for (const e of examRes.rows) {
     if (!examByTermType[e.term_number]) examByTermType[e.term_number] = {};
     examByTermType[e.term_number][e.type] = e;
+  }
+
+  // A current-exam report defaults to the admin-selected active exam.
+  if (mode === 'single' && !opts.exam_id) {
+    const active = examRes.rows.find((exam) => exam.is_active) || examRes.rows[examRes.rows.length - 1];
+    if (active) opts.exam_id = active.id;
   }
 
   const rubricCache = {};
