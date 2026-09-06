@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup Wizard — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .wizard-page { min-height: 100vh; background: var(--bg); padding: 26px 16px 60px; }
+  .wizard { max-width: 780px; margin: 0 auto; }
+  .wizard-head { text-align: center; margin-bottom: 20px; }
+  .wizard-head .logo { width: 60px; height: 60px; margin: 0 auto 8px; background: var(--primary); border-radius: 14px;
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; }
+  .wizard-head h1 { font-size: 22px; margin: 0; color: var(--primary); }
+  .wizard-head p { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .wizard-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 22px; }
+  .logo-preview { width: 90px; height: 90px; border: 2px dashed var(--border); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 8px; background: #fff; }
+  .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+  .repeat-list { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #fff; }
+  .repeat-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .repeat-row input, .repeat-row select { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--primary-soft); color: var(--primary); padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; }
+  .chip-remove { cursor: pointer; margin-left: 4px; }
+  .rubric-head { display: grid; grid-template-columns: 60px 60px 60px 60px 1fr; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .rubric-row { display: grid; grid-template-columns: 60px 60px 60px 60px 1fr; gap: 6px; margin-bottom: 6px; }
+</style>
+</head>
+<body data-page="setup">
+<div class="wizard-page">
+  <div class="wizard">
+    <div class="wizard-head">
+      <div class="logo">🏫</div>
+      <h1>School Setup Wizard</h1>
+      <p>Set up your school in six quick steps. You can change everything later from Admin.</p>
+    </div>
+    <div class="card">
+      <div class="wizard-steps" id="steps"></div>
+
+      <!-- STEP 1 -->
+      <div class="step-panel" id="step-1">
+        <h2 class="card-title">Step 1 — School Information</h2>
+        <p class="card-sub">Register your school and the administrator account.</p>
+        <div class="field"><label>School name <span class="req">*</span></label><input type="text" id="s_name" placeholder="e.g. Kibuye Junior Secondary School"></div>
+        <div class="field"><label>School motto</label><input type="text" id="s_motto" placeholder="e.g. Striving for Excellence"></div>
+        <div class="field"><label>P.O Box / Address</label><input type="text" id="s_address" placeholder="e.g. P.O. Box 123-20100, Nakuru"></div>
+        <div class="grid-2">
+          <div class="field">
+            <label>School logo (PNG/JPG, max 300×300)</label>
+            <div class="logo-preview" id="logoPreview">—</div>
+            <input type="file" id="s_logo" accept="image/png,image/jpeg">
+            <div class="hint">Uploaded logo is resized automatically.</div>
+          </div>
+          <div>
+            <div class="grid-2">
+              <div class="field"><label>Primary colour</label><input type="color" id="s_primary" value="#1a3a6b"></div>
+              <div class="field"><label>Secondary colour</label><input type="color" id="s_secondary" value="#1e7a3a"></div>
+            </div>
+            <div class="field"><label>Admin username <span class="req">*</span></label><input type="text" id="ad_username" placeholder="e.g. admin"></div>
+            <div class="field"><label>Admin password <span class="req">*</span></label><input type="password" id="ad_password" placeholder="Min 6 characters"></div>
+            <div class="field"><label>Site access password (for teachers)</label><input type="password" id="site_password" placeholder="Shared teacher password"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="step-panel hidden" id="step-2">
+        <h2 class="card-title">Step 2 — Academic Structure</h2>
+        <p class="card-sub">Define the academic year and exam structure.</p>
+        <div class="field"><label>Academic year <span class="req">*</span></label>
+          <input type="number" id="ac_year" value="2026" min="2000" max="2100" style="max-width:160px"></div>
+        <div class="field"><label>Number of terms</label>
+          <select id="ac_terms" style="max-width:160px">
+            <option value="2">2 terms</option><option value="3" selected>3 terms</option>
+          </select></div>
+        <div class="field"><label>Exams per term</label>
+          <select id="ac_exams" style="max-width:200px">
+            <option value="MID">Mid Term only</option>
+            <option value="END">End Term only</option>
+            <option value="BOTH" selected>Both Mid and End Term</option>
+          </select></div>
+        <div class="field">
+          <label><input type="checkbox" id="ac_t3mid" checked style="width:auto"> Mark Term 3 Mid Term as optional</label>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="step-panel hidden" id="step-3">
+        <h2 class="card-title">Step 3 — Register Classes</h2>
+        <p class="card-sub">Add classes, optionally with streams (e.g. Grade 7 East, Grade 7 West).</p>
+        <div class="flex mb-1">
+          <input type="text" id="c_name" placeholder="Class name e.g. Grade 7" style="max-width:220px">
+          <input type="text" id="c_stream" placeholder="Stream e.g. East (optional)" style="max-width:180px">
+          <button class="btn btn-secondary btn-sm" id="addClass">+ Add class</button>
+        </div>
+        <div class="repeat-list" id="classList"><p class="text-muted text-small mb-0">No classes added yet.</p></div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="step-panel hidden" id="step-4">
+        <h2 class="card-title">Step 4 — Register Subjects</h2>
+        <p class="card-sub">Common subjects are pre-loaded. Add, edit or remove as needed, and set the grading rubric.</p>
+        <div class="flex mb-1">
+          <input type="text" id="sub_code" placeholder="Code e.g. ENG" style="max-width:110px">
+          <input type="text" id="sub_name" placeholder="Full name e.g. English">
+          <input type="number" id="sub_ppw" placeholder="Periods/wk" value="5" style="max-width:110px">
+          <button class="btn btn-secondary btn-sm" id="addSub">+ Add subject</button>
+        </div>
+        <div class="repeat-list mb-2" id="subList"></div>
+        <div class="field">
+          <label>Grading rubric (global default)</label>
+          <div class="rubric-head"><span>Band</span><span>Min</span><span>Max</span><span>Pts</span><span>Grade</span></div>
+          <div id="rubricRows"></div>
+        </div>
+      </div>
+
+      <!-- STEP 5 -->
+      <div class="step-panel hidden" id="step-5">
+        <h2 class="card-title">Step 5 — Register Teachers</h2>
+        <p class="card-sub">Add staff accounts, assign subjects and classes, and set class teachers / HOI.</p>
+        <div class="repeat-list mb-2" id="teacherList"></div>
+        <button class="btn btn-secondary btn-sm" id="addTeacher">+ Add teacher</button>
+        <div class="hint mt-1">The administrator account is created automatically in Step 1 and is the Head of Institution.</div>
+      </div>
+
+      <!-- STEP 6 -->
+      <div class="step-panel hidden" id="step-6">
+        <h2 class="card-title">Step 6 — Register Students</h2>
+        <p class="card-sub">Add students individually or bulk-import via CSV.</p>
+        <div class="flex mb-1">
+          <input type="text" id="st_adm" placeholder="ADM no." style="max-width:130px">
+          <input type="text" id="st_name" placeholder="Full name">
+          <select id="st_class" style="max-width:200px"><option value="">— class —</option></select>
+          <button class="btn btn-secondary btn-sm" id="addStudent">+ Add</button>
+        </div>
+        <div class="repeat-list" id="studentList" style="max-height:180px;overflow:auto"><p class="text-muted text-small mb-0">No students yet.</p></div>
+        <div class="mt-2">
+          <a class="btn btn-ghost btn-sm" id="dlTemplate">⬇ Download CSV template</a>
+          <input type="file" id="csvFile" accept=".csv" class="hidden" style="display:none">
+          <button class="btn btn-outline btn-sm" id="impCsv">Import from CSV</button>
+        </div>
+        <p class="text-small text-muted mt-1">CSV columns: <code>ADM, Name, Class</code> where Class matches a class name + stream (e.g. "Grade 7 East").</p>
+      </div>
+
+      <div class="wizard-actions">
+        <button class="btn btn-ghost" id="prevBtn" style="visibility:hidden">← Back</button>
+        <div class="flex gap-1">
+          <button class="btn btn-outline" id="nextBtn">Next →</button>
+          <button class="btn btn-primary hidden" id="finishBtn"><span class="spinner spinner-white hidden" id="finishSpin"></span> Finish Setup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(function () {
+  const DEFAULT_RUBRIC = [
+    { band:'BE2', min:0, max:9, points:5, grade:'D' },
+    { band:'BE1', min:10, max:19, points:6, grade:'C-' },
+    { band:'AE2', min:20, max:29, points:7, grade:'C' },
+    { band:'AE1', min:30, max:39, points:8, grade:'B-' },
+    { band:'ME2', min:40, max:56, points:9, grade:'B' },
+    { band:'ME1', min:57, max:74, points:10, grade:'B+' },
+    { band:'EE2', min:75, max:89, points:11, grade:'A-' },
+    { band:'EE1', min:90, max:100, points:12, grade:'A' },
+  ];
+  const state = { step: 1, maxStep: 6, logo_path: null,
+    classes: [], subjects: [], teachers: [], students: [], rubric: DEFAULT_RUBRIC.map(x=>({...x})) };
+
+  const subjectsAre = {
+    'ENG':'English','KIS':'Kiswahili','MATHS':'Mathematics','IS':'Integrated Science',
+    'P/T':'Pre-Technical Studies','AGRIC':'Agriculture','SST':'Social Studies',
+    'CRE':'Christian Religious Education','CAS':'Creative Arts & Sports' };
+  // preload default subjects
+  Object.entries(subjectsAre).forEach(([code, full]) => state.subjects.push({ code, full_name: full, periods_per_week: 5 }));
+
+  const stepsMeta = [
+    [1,'School'],[2,'Structure'],[3,'Classes'],[4,'Subjects'],[5,'Teachers'],[6,'Students']
+  ];
+
+  function renderSteps() {
+    document.getElementById('steps').innerHTML = stepsMeta.map(([n, label]) => {
+      const cls = n === state.step ? 'active' : (n < state.step ? 'done' : '');
+      return `<div class="wizard-step ${cls}"><span class="step-num">${n}</span><br>${label}</div>`;
+    }).join('');
+    for (let i=1;i<=6;i++) {
+      document.getElementById('step-'+i).classList.toggle('hidden', i !== state.step);
+    }
+    document.getElementById('prevBtn').style.visibility = state.step === 1 ? 'hidden' : 'visible';
+    document.getElementById('nextBtn').classList.toggle('hidden', state.step === state.maxStep);
+    document.getElementById('finishBtn').classList.toggle('hidden', state.step !== state.maxStep);
+  }
+
+  // ---- classes ----
+  function renderClasses() {
+    const el = document.getElementById('classList');
+    if (!state.classes.length) { el.innerHTML = '<p class="text-muted text-small mb-0">No classes added yet.</p>'; return; }
+    el.innerHTML = state.classes.map((c, i) => `
+      <div class="repeat-row">
+        <input value="${App.escapeHtml(c.name)}" data-cname="${i}" placeholder="Class">
+        <input value="${App.escapeHtml(c.stream)}" data-cstream="${i}" placeholder="Stream">
+        <button class="btn btn-danger btn-sm" data-rm="${i}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+      state.classes.splice(Number(b.dataset.rm),1); renderClasses(); syncStudentClassSelect();
+    }));
+    el.querySelectorAll('[data-cname]').forEach(inp => inp.addEventListener('input', () => state.classes[Number(inp.dataset.cname)].name = inp.value));
+    el.querySelectorAll('[data-cstream]').forEach(inp => inp.addEventListener('input', () => state.classes[Number(inp.dataset.cstream)].stream = inp.value));
+  }
+  document.getElementById('addClass').addEventListener('click', () => {
+    const name = document.getElementById('c_name').value.trim();
+    const stream = document.getElementById('c_stream').value.trim();
+    if (!name) return App.toast('Enter a class name', 'warn');
+    state.classes.push({ name, stream });
+    document.getElementById('c_name').value=''; document.getElementById('c_stream').value='';
+    renderClasses(); syncStudentClassSelect();
+  });
+
+  function syncStudentClassSelect() {
+    const sel = document.getElementById('st_class');
+    sel.innerHTML = '<option value="">— class —</option>' + state.classes.map(c =>
+      `<option value="${App.escapeHtml(c.name + (c.stream ? ' ' + c.stream : ''))}">${App.escapeHtml(c.name + (c.stream ? ' ' + c.stream : ''))}</option>`).join('');
+  }
+
+  // ---- subjects ----
+  function renderSubjects() {
+    const el = document.getElementById('subList');
+    el.innerHTML = state.subjects.map((s, i) => `
+      <div class="repeat-row">
+        <input value="${App.escapeHtml(s.code)}" data-scode="${i}" placeholder="Code" style="max-width:110px">
+        <input value="${App.escapeHtml(s.full_name)}" data-sname="${i}" placeholder="Full name">
+        <input type="number" value="${s.periods_per_week}" data-sppw="${i}" placeholder="Per/wk" style="max-width:100px">
+        <button class="btn btn-danger btn-sm" data-srm="${i}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-srm]').forEach(b => b.addEventListener('click', () => { state.subjects.splice(Number(b.dataset.srm),1); renderSubjects(); }));
+    el.querySelectorAll('[data-scode]').forEach(inp => inp.addEventListener('input', () => state.subjects[Number(inp.dataset.scode)].code = inp.value.toUpperCase()));
+    el.querySelectorAll('[data-sname]').forEach(inp => inp.addEventListener('input', () => state.subjects[Number(inp.dataset.sname)].full_name = inp.value));
+    el.querySelectorAll('[data-sppw]').forEach(inp => inp.addEventListener('input', () => state.subjects[Number(inp.dataset.sppw)].periods_per_week = Number(inp.value)||5));
+  }
+  document.getElementById('addSub').addEventListener('click', () => {
+    const code = document.getElementById('sub_code').value.trim().toUpperCase();
+    const full = document.getElementById('sub_name').value.trim();
+    if (!code || !full) return App.toast('Enter subject code and name', 'warn');
+    state.subjects.push({ code, full_name: full, periods_per_week: Number(document.getElementById('sub_ppw').value)||5 });
+    document.getElementById('sub_code').value=''; document.getElementById('sub_name').value='';
+    renderSubjects();
+  });
+
+  // ---- rubric ----
+  function renderRubric() {
+    document.getElementById('rubricRows').innerHTML = state.rubric.map((b, i) => `
+      <div class="rubric-row">
+        <input value="${b.band}" data-rband="${i}">
+        <input type="number" value="${b.min}" data-rmin="${i}">
+        <input type="number" value="${b.max}" data-rmax="${i}">
+        <input type="number" value="${b.points}" data-rpts="${i}">
+        <input value="${b.grade}" data-rgrade="${i}">
+      </div>`).join('');
+    document.querySelectorAll('[data-rband]').forEach(inp => inp.addEventListener('input', () => state.rubric[Number(inp.dataset.rband)].band = inp.value));
+    document.querySelectorAll('[data-rmin]').forEach(inp => inp.addEventListener('input', () => state.rubric[Number(inp.dataset.rmin)].min = Number(inp.value)));
+    document.querySelectorAll('[data-rmax]').forEach(inp => inp.addEventListener('input', () => state.rubric[Number(inp.dataset.rmax)].max = Number(inp.value)));
+    document.querySelectorAll('[data-rpts]').forEach(inp => inp.addEventListener('input', () => state.rubric[Number(inp.dataset.rpts)].points = Number(inp.value)));
+    document.querySelectorAll('[data-rgrade]').forEach(inp => inp.addEventListener('input', () => state.rubric[Number(inp.dataset.rgrade)].grade = inp.value));
+  }
+
+  // ---- teachers ----
+  function addTeacherRow(t) {
+    t = t || { full_name:'', username:'', password:'', max_periods:30, subject_codes:[], class_names:[], is_hoi:false, class_teacher_of:'' };
+    const el = document.getElementById('teacherList');
+    const row = document.createElement('div');
+    row.className = 'card mb-1';
+    row.style.padding = '14px';
+    row.innerHTML = `
+      <div class="grid-2">
+        <div class="field mb-1"><label>Full name</label><input data-t="full_name" value="${App.escapeHtml(t.full_name)}"></div>
+        <div class="field mb-1"><label>Username</label><input data-t="username" value="${App.escapeHtml(t.username)}"></div>
+        <div class="field mb-1"><label>Password</label><input type="password" data-t="password" value="${App.escapeHtml(t.password)}"></div>
+        <div class="field mb-1"><label>Max periods/week</label><input type="number" data-t="max_periods" value="${t.max_periods}"></div>
+      </div>
+      <div class="field mb-1">
+        <label>Subjects taught</label>
+        <div class="chips" data-t="subjects"></div>
+      </div>
+      <div class="field mb-1">
+        <label>Classes responsible for (check to make Class Teacher)</label>
+        <div class="chips" data-t="classes"></div>
+      </div>
+      <div class="flex mb-1">
+        <label class="text-small"><input type="checkbox" data-t="is_hoi" ${t.is_hoi?'checked':''} style="width:auto"> Head of Institution</label>
+        <button class="btn btn-danger btn-sm" data-t="remove">Remove</button>
+      </div>`;
+    row.querySelector('[data-t="remove"]').addEventListener('click', () => { row.remove(); state.teachers = state.teachers.filter(x => x._row !== row); });
+
+    // subject chips
+    const subjChip = row.querySelector('[data-t="subjects"]');
+    state.subjects.forEach(s => {
+      const c = document.createElement('span'); c.className='chip';
+      c.innerHTML = `${App.escapeHtml(s.code)}<span class="chip-remove">×</span>`;
+      c.dataset.code = s.code;
+      if (t.subject_codes.includes(s.code)) c.style.opacity='1'; else c.style.opacity='0.45';
+      c.querySelector('.chip-remove').addEventListener('click', () => { t.subject_codes = t.subject_codes.filter(x=>x!==s.code); c.style.opacity='0.45'; });
+      c.addEventListener('click', () => {
+        if (c.querySelector('.chip-remove') === event.target) return;
+        if (t.subject_codes.includes(s.code)) { t.subject_codes = t.subject_codes.filter(x=>x!==s.code); c.style.opacity='0.45'; }
+        else { t.subject_codes.push(s.code); c.style.opacity='1'; }
+      });
+      subjChip.appendChild(c);
+    });
+    // class chips
+    const classChip = row.querySelector('[data-t="classes"]');
+    state.classes.forEach((cl, idx) => {
+      const disp = cl.name + (cl.stream ? ' ' + cl.stream : '');
+      const c = document.createElement('span'); c.className='chip';
+      c.innerHTML = `${App.escapeHtml(disp)}`;
+      const classTeacher = t.class_teacher_of === disp;
+      if (t.class_names.includes(disp) || classTeacher) c.style.opacity='1'; else c.style.opacity='0.45';
+      if (classTeacher) { c.textContent = disp + ' (CT)'; c.style.background = 'var(--secondary)'; c.style.color='#fff'; }
+      c.addEventListener('click', () => {
+        if (t.class_names.includes(disp)) {
+          t.class_names = t.class_names.filter(x=>x!==disp);
+          if (t.class_teacher_of === disp) { t.class_teacher_of=''; }
+          c.style.opacity='0.45'; c.textContent = disp;
+        } else {
+          t.class_names.push(disp); c.style.opacity='1';
+        }
+      });
+      // right-click or a small CT toggle
+      const ctBtn = document.createElement('span'); ctBtn.className='chip-remove'; ctBtn.textContent=' ★'; ctBtn.title='Mark as class teacher';
+      ctBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (t.class_teacher_of === disp) { t.class_teacher_of=''; }
+        else { t.class_teacher_of = disp; if (!t.class_names.includes(disp)) t.class_names.push(disp); }
+        renderTeacherChips(row, t);
+      });
+      c.appendChild(ctBtn);
+      classChip.appendChild(c);
+    });
+
+    row.querySelectorAll('[data-t="full_name"]').forEach(inp => inp.addEventListener('input', () => t.full_name = inp.value));
+    row.querySelectorAll('[data-t="username"]').forEach(inp => inp.addEventListener('input', () => t.username = inp.value));
+    row.querySelectorAll('[data-t="password"]').forEach(inp => inp.addEventListener('input', () => t.password = inp.value));
+    row.querySelectorAll('[data-t="max_periods"]').forEach(inp => inp.addEventListener('input', () => t.max_periods = Number(inp.value)||30));
+    row.querySelectorAll('[data-t="is_hoi"]').forEach(inp => inp.addEventListener('change', () => t.is_hoi = inp.checked));
+
+    t._row = row;
+    state.teachers.push(t);
+    el.appendChild(row);
+  }
+  function renderTeacherChips(row, t) {
+    const classChip = row.querySelector('[data-t="classes"]');
+    classChip.innerHTML='';
+    state.classes.forEach(cl => {
+      const disp = cl.name + (cl.stream ? ' ' + cl.stream : '');
+      const c = document.createElement('span'); c.className='chip';
+      const classTeacher = t.class_teacher_of === disp;
+      c.innerHTML = App.escapeHtml(disp) + (classTeacher ? ' (CT)' : '');
+      if (classTeacher) { c.style.background='var(--secondary)'; c.style.color='#fff'; }
+      if (t.class_names.includes(disp) || classTeacher) c.style.opacity='1'; else c.style.opacity='0.45';
+      c.addEventListener('click', () => {
+        if (t.class_names.includes(disp)) { t.class_names = t.class_names.filter(x=>x!==disp); if (t.class_teacher_of===disp) t.class_teacher_of=''; c.style.opacity='0.45'; c.textContent=disp; }
+        else { t.class_names.push(disp); c.style.opacity='1'; }
+      });
+      const ctBtn = document.createElement('span'); ctBtn.className='chip-remove'; ctBtn.textContent=' ★'; ctBtn.title='Make class teacher';
+      ctBtn.addEventListener('click', (e) => { e.stopPropagation(); if (t.class_teacher_of===disp) t.class_teacher_of=''; else { t.class_teacher_of=disp; if(!t.class_names.includes(disp)) t.class_names.push(disp); } renderTeacherChips(row,t); });
+      c.appendChild(ctBtn);
+      classChip.appendChild(c);
+    });
+  }
+  document.getElementById('addTeacher').addEventListener('click', () => addTeacherRow());
+
+  // ---- students ----
+  function renderStudents() {
+    const el = document.getElementById('studentList');
+    if (!state.students.length) { el.innerHTML = '<p class="text-muted text-small mb-0">No students yet.</p>'; return; }
+    el.innerHTML = state.students.map((s,i) => `
+      <div class="repeat-row">
+        <span style="flex:none;width:110px;font-size:13px">${App.escapeHtml(s.adm)}</span>
+        <span style="flex:1;font-size:13px">${App.escapeHtml(s.name)}</span>
+        <span style="flex:none;width:130px;font-size:13px">${App.escapeHtml(s.class)}</span>
+        <button class="btn btn-danger btn-sm" data-strm="${i}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-strm]').forEach(b => b.addEventListener('click', () => { state.students.splice(Number(b.dataset.strm),1); renderStudents(); }));
+  }
+  document.getElementById('addStudent').addEventListener('click', () => {
+    const adm = document.getElementById('st_adm').value.trim();
+    const name = document.getElementById('st_name').value.trim();
+    const cls = document.getElementById('st_class').value;
+    if (!adm || !name) return App.toast('Enter ADM and name', 'warn');
+    state.students.push({ adm, name, class: cls });
+    document.getElementById('st_adm').value=''; document.getElementById('st_name').value='';
+    renderStudents();
+  });
+
+  // CSV import
+  document.getElementById('impCsv').addEventListener('click', () => document.getElementById('csvFile').click());
+  document.getElementById('csvFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const header = lines[0].toLowerCase();
+    const hasHeader = header.includes('adm') || header.includes('name');
+    const rows = hasHeader ? lines.slice(1) : lines;
+    for (const line of rows) {
+      const cols = line.split(',').map(c => c.trim());
+      if (cols.length < 2) continue;
+      const adm = (hasHeader ? cols[0] : cols[0]);
+      const name = cols[1];
+      const cls = cols[2] || '';
+      state.students.push({ adm, name, class: cls });
+    }
+    renderStudents();
+    App.toast(`Imported ${rows.length} students from CSV`);
+    e.target.value='';
+  });
+  // CSV template download
+  document.getElementById('dlTemplate').addEventListener('click', () => {
+    const csv = "ADM,Name,Class\nADM001,John Doe,Grade 7 East\n";
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'students_template.csv'; a.click();
+  });
+
+  // ---- logo upload ----
+  document.getElementById('s_logo').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('logo', file);
+    try {
+      const d = await App.api('/api/upload/logo', { method: 'POST', form: fd });
+      state.logo_path = d.logo_path;
+      document.getElementById('logoPreview').innerHTML = `<img src="${d.logo_path}">`;
+      App.toast('Logo uploaded');
+    } catch (err) { App.toast(err.message || 'Logo upload failed', 'error'); }
+  });
+
+  // ---- navigation ----
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    if (state.step === 1) {
+      if (!document.getElementById('s_name').value.trim()) return App.toast('Enter the school name', 'warn');
+      if (!document.getElementById('ad_username').value.trim()) return App.toast('Admin username required', 'warn');
+      if (!document.getElementById('ad_password').value || document.getElementById('ad_password').value.length < 6) return App.toast('Admin password must be at least 6 characters', 'warn');
+    }
+    if (state.step < state.maxStep) { state.step++; renderSteps(); }
+  });
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    if (state.step > 1) { state.step--; renderSteps(); }
+  });
+
+  // ---- finish ----
+  document.getElementById('finishBtn').addEventListener('click', async () => {
+    const payload = {
+      school: {
+        name: document.getElementById('s_name').value.trim(),
+        motto: document.getElementById('s_motto').value.trim(),
+        address: document.getElementById('s_address').value.trim(),
+        primary_color: document.getElementById('s_primary').value,
+        secondary_color: document.getElementById('s_secondary').value,
+        logo_path: state.logo_path,
+      },
+      admin: {
+        username: document.getElementById('ad_username').value.trim(),
+        password: document.getElementById('ad_password').value,
+        full_name: 'Administrator',
+      },
+      site_password: document.getElementById('site_password').value,
+      academic_year: Number(document.getElementById('ac_year').value),
+      no_of_terms: Number(document.getElementById('ac_terms').value),
+      exams_per_term: document.getElementById('ac_exams').value,
+      term3_mid_optional: document.getElementById('ac_t3mid').checked,
+      classes: state.classes,
+      subjects: state.subjects,
+      teachers: state.teachers.map(t => ({ full_name:t.full_name, username:t.username, password:t.password, max_periods:t.max_periods, subject_codes:t.subject_codes, class_names:t.class_names, class_teacher_of:t.class_teacher_of, is_hoi:t.is_hoi })),
+      students: state.students,
+    };
+    const finishBtn = document.getElementById('finishBtn');
+    finishBtn.disabled = true;
+    document.getElementById('finishSpin').classList.remove('hidden');
+    try {
+      await App.api('/api/setup', { method: 'POST', body: payload });
+      App.toast('Setup complete! Redirecting...');
+      setTimeout(() => window.location.href='/login', 900);
+    } catch (err) {
+      finishBtn.disabled = false;
+      document.getElementById('finishSpin').classList.add('hidden');
+      App.toast(err.message || 'Setup failed', 'error');
+    }
+  });
+
+  // ---- init ----
+  renderSteps(); renderClasses(); renderSubjects(); renderRubric(); syncStudentClassSelect();
+  addTeacherRow({ full_name:'Head Teacher', username:'teacher', password:'teach123', max_periods:30, is_hoi:false });
+})();
+</script>
+</body>
+</html>

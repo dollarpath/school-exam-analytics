@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Views — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .tt-grid2 { border-collapse: collapse; width: 100%; }
+  .tt-grid2 th, .tt-grid2 td { border: 1px solid var(--border); text-align: center; padding: 7px; font-size: 12px; }
+  .tt-grid2 th { background: var(--primary); color: #fff; }
+  .tt-grid2 td.period-label { background: var(--bg); font-weight: 700; width: 80px; }
+  .tt-grid2 td.mono { background: var(--secondary-soft); }
+  .tt-subj { font-weight: 700; color: var(--primary); }
+  @media print { body { background:#fff; } .view-controls { display:none; } }
+</style>
+</head>
+<body data-page="timetable" style="display:flex;flex-direction:column;min-height:100vh;">
+<header class="topbar no-print"><div class="topbar-inner">
+  <div id="php-brand"></div>
+  <div class="topbar-actions" id="php-user"></div>
+</div></header>
+<nav class="navbar no-print"><div class="nav-inner" id="ph-nav"></div></nav>
+
+<main class="page">
+  <h1 style="margin:0 0 6px">Timetable Views</h1>
+  <p class="text-muted text-small" style="margin:0 0 18px">View timetables by class, by teacher, or as a whole-school block. All printable.</p>
+
+  <div class="card view-controls">
+    <div class="filter-bar">
+      <div class="field"><label>Term</label><select id="selTerm"></select></div>
+      <div class="field"><label>View type</label>
+        <select id="selType"><option value="class">By class</option><option value="teacher">By teacher</option><option value="block">Block (all classes)</option></select></div>
+      <div class="field" id="entityField"><label>Class / Teacher</label><select id="selEntity"></select></div>
+      <button class="btn btn-primary" id="loadBtn">View</button>
+      <button class="btn btn-secondary" id="printBtn">🖨 Print</button>
+    </div>
+  </div>
+
+  <div id="ttArea"><div class="loading-block">Select a term and view.</div></div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () { await App.boot('timetable'); await init(); });
+const DAYS = ['MON','TUE','WED','THU','FRI'];
+const DAYNAME = { MON:'Monday', TUE:'Tuesday', WED:'Wednesday', THU:'Thursday', FRI:'Friday' };
+
+async function init() {
+  const [classes, teachers] = await Promise.all([App.api('/api/classes'), App.api('/api/teachers')]);
+  document.getElementById('selTerm').innerHTML = '<option value="">— term —</option><option value="1">Term 1</option><option value="2">Term 2</option><option value="3">Term 3</option>';
+  document.getElementById('selEntity').innerHTML = '<option value="">— choose —</option>' + classes.classes.map(c => `<option value="${c.id}">${App.escapeHtml(c.display_name)}</option>`).join('');
+  document.getElementById('selType').addEventListener('change', (e) => {
+    const t = e.target.value;
+    const ent = document.getElementById('selEntity');
+    if (t === 'teacher') ent.innerHTML = teachers.teachers.map(te => `<option value="${te.id}">${App.escapeHtml(te.full_name)}</option>`).join('');
+    else ent.innerHTML = classes.classes.map(c => `<option value="${c.id}">${App.escapeHtml(c.display_name)}</option>`).join('');
+    document.getElementById('entityField').style.display = t === 'block' ? 'none' : 'block';
+  });
+  document.getElementById('loadBtn').addEventListener('click', load);
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+}
+
+async function load() {
+  const termId = document.getElementById('selTerm').value;
+  const type = document.getElementById('selType').value;
+  if (!termId) return App.toast('Choose term','warn');
+  const exams = await App.api('/api/exams');
+  const ex = exams.exams.find(e => e.term_number == termId);
+  if (!ex) return App.toast('No term for this year','warn');
+  const realTermId = ex.term_id;
+
+  const area = document.getElementById('ttArea');
+  if (type === 'class') {
+    const cid = document.getElementById('selEntity').value;
+    if (!cid) return App.toast('Choose a class','warn');
+    const d = await App.api(`/api/timetable/${cid}/${realTermId}`);
+    area.innerHTML = renderClass(d);
+  } else if (type === 'teacher') {
+    const tid = document.getElementById('selEntity').value;
+    if (!tid) return App.toast('Choose a teacher','warn');
+    const d = await App.api(`/api/timetable/teacher/${tid}/${realTermId}`);
+    area.innerHTML = renderTeacher(d, tid);
+  } else {
+    // block: fetch all classes
+    const classes = await App.api('/api/classes');
+    let html = '';
+    for (const c of classes.classes) {
+      const d = await App.api(`/api/timetable/${c.id}/${realTermId}`);
+      html += renderClass(d);
+    }
+    area.innerHTML = html;
+  }
+}
+
+function renderClass(d) {
+  const slots = d.slots; const periods = d.periodCount || 8;
+  const cellMap = {}; slots.forEach(s => cellMap[s.day+'|'+s.period] = s);
+  let html = `<div class="card"><div style="display:none" class="tt-print-head"><h2>${App.escapeHtml(d.class.display_name)} — Timetable</h2><p>${App.escapeHtml(d.term.label)}</p></div>
+    <h2 class="card-title">${App.escapeHtml(d.class.display_name)} — ${App.escapeHtml(d.term.label)}</h2>
+    <div class="table-wrap"><table class="tt-grid2"><thead><tr><th>Day</th>`;
+  for (let p=1;p<=periods;p++) html += `<th>P${p}</th>`;
+  html += '</tr></thead><tbody>';
+  DAYS.forEach(day => {
+    html += `<tr><td class="period-label">${DAYNAME[day]}</td>`;
+    for (let p=1;p<=periods;p++) {
+      const c = cellMap[day+'|'+p];
+      html += `<td>${c ? `<span class="tt-subj">${App.escapeHtml(c.subject_code||'—')}</span><br><span class="text-muted" style="font-size:11px">${App.escapeHtml(c.teacher_name||'')}</span>` : '<span class="text-muted">—</span>'}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+function renderTeacher(d) {
+  const slots = d.slots; const periods = d.periodCount || 8;
+  const cellMap = {}; slots.forEach(s => cellMap[s.day+'|'+s.period] = s);
+  let html = `<div class="card"><h2 class="card-title">Teacher Timetable</h2><div class="table-wrap"><table class="tt-grid2"><thead><tr><th>Day</th>`;
+  for (let p=1;p<=periods;p++) html += `<th>P${p}</th>`;
+  html += '</tr></thead><tbody>';
+  DAYS.forEach(day => {
+    html += `<tr><td class="period-label">${DAYNAME[day]}</td>`;
+    for (let p=1;p<=periods;p++) {
+      const c = cellMap[day+'|'+p];
+      html += `<td>${c ? `<span class="tt-subj">${App.escapeHtml(c.subject_code||'—')}</span><br><span class="text-muted" style="font-size:11px">${App.escapeHtml(c.class_name||'')}</span>` : '<span class="text-muted">—</span>'}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+</script>
+</body>
+</html>

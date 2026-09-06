@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); padding: 20px; }
+  .login-card { width: 100%; max-width: 420px; background: #fff; border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25); overflow: hidden; }
+  .login-header { background: var(--primary); color: #fff; padding: 26px 24px; text-align: center; }
+  .login-header .logo { width: 68px; height: 68px; margin: 0 auto 10px; border-radius: 12px; background: #fff;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .login-header .logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+  .login-header .logo .no-logo { font-size: 30px; font-weight: 800; color: var(--primary); }
+  .login-header h1 { font-size: 20px; margin: 0; }
+  .login-header p { margin: 4px 0 0; font-size: 12px; opacity: 0.9; }
+  .login-body { padding: 24px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab { flex: 1; text-align: center; padding: 10px; border-radius: 8px; background: #f1f5f9;
+    color: var(--muted); cursor: pointer; font-weight: 600; font-size: 14px; }
+  .tab.active { background: var(--primary); color: #fff; }
+  .login-footer { text-align: center; padding: 14px; font-size: 12px; color: var(--muted); background: var(--bg); }
+</style>
+</head>
+<body data-page="login">
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo" id="loginLogo"></div>
+      <h1 id="loginName">School</h1>
+      <p id="loginMotto"></p>
+    </div>
+    <div class="login-body">
+      <div class="tabs">
+        <div class="tab active" data-mode="staff">Staff Login</div>
+        <div class="tab" data-mode="site">Site Password</div>
+      </div>
+      <form id="staffForm">
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="u" autocomplete="username" placeholder="e.g. admin" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="p" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="staffBtn">Sign in</button>
+      </form>
+      <form id="siteForm" class="hidden">
+        <div class="field">
+          <label>School Site Access Password</label>
+          <input type="password" id="sp" autocomplete="current-password" placeholder="Enter school site password" required>
+        </div>
+        <p class="text-small text-muted">Use this password to access the system without a personal staff account.</p>
+        <button class="btn btn-secondary btn-block" type="submit" id="siteBtn">Continue</button>
+      </form>
+      <div class="alert alert-error hidden mt-2" id="loginErr"></div>
+    </div>
+    <div class="login-footer">School Exam Analytics System · v1.0</div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(async function () {
+  // Load theme + decide where to send already-authenticated users
+  let init = null;
+  try { init = await App.api('/api/init'); } catch (e) {}
+  if (init) {
+    App.applyTheme(init);
+    const s = init.school;
+    if (s) {
+      document.getElementById('loginName').textContent = s.name || 'School';
+      document.getElementById('loginMotto').textContent = s.motto || '';
+      const logoHtml = s.logo_path
+        ? `<img src="${s.logo_path}">` : `<div class="no-logo">${(s.name || 'S').charAt(0)}</div>`;
+      document.getElementById('loginLogo').innerHTML = logoHtml;
+    }
+  }
+  // If setup not complete, force setup wizard
+  if (init && !init.setup_complete) { window.location.href = '/setup'; return; }
+  // If already logged in, go home
+  try { const me = await App.api('/api/auth/me'); if (me.user) window.location.href = '/index'; } catch (e) {}
+
+  // Mode switching
+  const modalTabs = document.querySelectorAll('.tab');
+  const staff = document.getElementById('staffForm');
+  const site = document.getElementById('siteForm');
+  modalTabs.forEach(t => t.addEventListener('click', () => {
+    modalTabs.forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    staff.classList.toggle('hidden', t.dataset.mode !== 'staff');
+    site.classList.toggle('hidden', t.dataset.mode !== 'site');
+  }));
+
+  function showErr(msg) { const el = document.getElementById('loginErr'); el.textContent = msg; el.classList.remove('hidden'); }
+  function hideErr() { document.getElementById('loginErr').classList.add('hidden'); }
+
+  document.getElementById('staffForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); hideErr();
+    const btn = document.getElementById('staffBtn');
+    btn.disabled = true; btn.innerHTML = `<span class="spinner spinner-white"></span> Signing in...`;
+    try {
+      const d = await App.api('/api/auth/login', { method: 'POST', body: { username: document.getElementById('u').value, password: document.getElementById('p').value } });
+      window.location.href = '/index';
+    } catch (err) { showErr(err.message || 'Login failed'); btn.disabled = false; btn.textContent = 'Sign in'; }
+  });
+
+  document.getElementById('siteForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); hideErr();
+    const btn = document.getElementById('siteBtn');
+    btn.disabled = true; btn.innerHTML = `<span class="spinner spinner-white"></span> Continuing...`;
+    try {
+      await App.api('/api/auth/login-site', { method: 'POST', body: { password: document.getElementById('sp').value } });
+      window.location.href = '/index';
+    } catch (err) { showErr(err.message || 'Login failed'); btn.disabled = false; btn.textContent = 'Continue'; }
+  });
+})();
+</script>
+</body>
+</html>

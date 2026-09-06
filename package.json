@@ -1,0 +1,42 @@
+{
+  "name": "school-exam-analytics",
+  "version": "1.0.0",
+  "description": "School Exam Analytics System - full-stack exam management, marking, broadsheet and report generation for schools",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development nodemon server.js",
+    "db:init": "node scripts/db-init.js",
+    "db:seed": "node scripts/db-seed.js",
+    "db:reset": "node scripts/db-reset.js"
+  },
+  "keywords": [
+    "school",
+    "exam",
+    "analytics",
+    "broadsheet",
+    "report",
+    "timetable"
+  ],
+  "author": "Arena.ai",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^2.3.0",
+    "node-cache": "^5.1.2",
+    "pg": "^8.12.0",
+    "pg-mem": "^3.0.14",
+    "sharp": "^0.33.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

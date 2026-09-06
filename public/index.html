@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-page="home" style="display:flex;flex-direction:column;min-height:100vh;">
+<header class="topbar no-print"><div class="topbar-inner">
+  <div id="php-brand"></div>
+  <div class="topbar-actions" id="php-user"></div>
+</div></header>
+<nav class="navbar no-print"><div class="nav-inner" id="ph-nav"></div></nav>
+
+<main class="page">
+  <div id="dashContent"><div class="loading-block">Loading dashboard…</div></div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  await App.boot('home');
+  await loadDashboard();
+});
+
+async function loadDashboard() {
+  const c = document.getElementById('dashContent');
+  const user = App.state.user;
+  try {
+    const [classes, subjects, teachers, students, exams, me] = await Promise.all([
+      App.api('/api/classes'),
+      App.api('/api/subjects'),
+      App.api('/api/teachers'),
+      App.api('/api/students'),
+      App.api('/api/exams'),
+      App.api('/api/auth/me'),
+    ]);
+    const init = App.state.init;
+    const school = init && init.school;
+    const activeExam = exams.exams.find(e => e.is_active) || exams.exams[0];
+    const terms = (init && init.config.no_of_terms) || 3;
+
+    const card = (title, sub, inner) => `<div class="card"><h2 class="card-title">${title}</h2><p class="card-sub">${sub}</p>${inner}</div>`;
+
+    let html = `
+      <div class="flex-between mb-2">
+        <div>
+          <h1 style="margin:0 0 4px">Welcome back, ${App.escapeHtml(user.full_name || user.username)} 👋</h1>
+          <p class="text-muted text-small" style="margin:0">${school ? App.escapeHtml(school.name) + ' · ' + App.escapeHtml(school.motto || '') : ''}</p>
+        </div>
+        ${user.is_admin ? `<a class="btn btn-outline" href="/admin">Admin Panel</a>` : ''}
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-label">Students</div><div class="stat-value">${students.students.length}</div></div>
+        <div class="stat"><div class="stat-label">Classes</div><div class="stat-value">${classes.classes.length}</div></div>
+        <div class="stat"><div class="stat-label">Teachers</div><div class="stat-value">${teachers.teachers.length}</div></div>
+        <div class="stat"><div class="stat-label">Subjects</div><div class="stat-value">${subjects.subjects.length}</div></div>
+      </div>
+
+      <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));">
+        ${card('Current Exam', 'The exam currently in focus for mark entry.', `
+          ${activeExam ? `
+            <div class="flex-between">
+              <div>
+                <div class="font-bold" style="font-size:16px">${App.escapeHtml(activeExam.label)}</div>
+                <div class="text-muted text-small">${activeExam.year} · ${App.escapeHtml(activeExam.term_label)} · ${activeExam.type}</div>
+              </div>
+              <span class="badge ${activeExam.is_active ? 'badge-success' : 'badge-neutral'}">${activeExam.is_active ? 'Active' : 'Inactive'}</span>
+            </div>
+            <div class="mt-1 text-small text-muted">Marks entry: ${activeExam.entry_open ? '<span class="badge badge-success">Open</span>' : '<span class="badge badge-neutral">Closed</span>'} · Results: ${activeExam.published ? '<span class="badge badge-info">Published</span>' : '<span class="badge badge-warning">Draft</span>'}</div>
+          ` : '<p class="text-muted">No exam defined yet.</p>'}
+        `)}
+
+        ${card('Quick Actions', 'Jump straight into the most-used modules.', `
+          <div class="grid-2">
+            <a class="btn btn-primary" href="/marks">✍ Marks Entry</a>
+            <a class="btn btn-secondary" href="/broadsheet">📊 Broadsheet</a>
+            <a class="btn btn-outline" href="/report">🧾 Reports</a>
+            <a class="btn btn-outline" href="/data">🗂 Data Viewer</a>
+            ${user.is_admin ? `<a class="btn btn-outline" href="/timetable">🕒 Timetable</a>` : ''}
+          </div>
+        `)}
+      </div>
+
+      <div class="grid-2">
+        ${card('Latest Exams', 'The most recent exams in this academic year.', exams.exams.slice(0,5).map(e => `
+          <div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <div><div class="font-bold">${App.escapeHtml(e.label)}</div><div class="text-muted text-small">${e.year} · ${App.escapeHtml(e.term_label)}</div></div>
+            <span class="badge ${e.is_active ? 'badge-success' : e.published ? 'badge-info' : 'badge-neutral'}">${e.is_active ? 'Active' : e.published ? 'Published' : e.entry_open ? 'Entering' : 'Ready'}</span>
+          </div>`).join('') || '<p class="text-muted">No exams yet.</p>')}
+
+        ${card('Grade Scale', `Rubric used to grade (${terms} terms/year).`, `
+          <div class="table-wrap"><table class="data-table compact-table">
+            <thead><tr><th>Band</th><th>Range</th><th>Pts</th></tr></thead>
+            <tbody>${(subjects.global_rubric || []).map(b => `<tr><td><span class="grade-chip">${App.escapeHtml(b.label)}</span></td><td>${b.min}–${b.max}</td><td>${b.points}</td></tr>`).join('')}</tbody>
+          </table></div>
+        `)}
+      </div>
+    `;
+    c.innerHTML = html;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-error">Failed to load dashboard: ${App.escapeHtml(err.message)}</div>`;
+  }
+}
+</script>
+</body>
+</html>

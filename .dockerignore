@@ -1,0 +1,12 @@
+# Docker / Codespaces build context — keep it light and secrets out.
+node_modules
+.env
+.env.*
+public/uploads
+uploads
+.git
+*.log
+npm-debug.log*
+.DS_Store
+coverage
+tmp

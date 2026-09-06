@@ -1,0 +1,51 @@
+# ============================================================
+# Docker Compose for GitHub Codespaces / Dev Containers.
+#
+# Two services on a shared compose network:
+#   - db   : PostgreSQL database (sidecar), reachable by the app
+#            at hostname `db` on port 5432.
+#   - app  : your Node.js project (the Codespace attaches here).
+#
+# The app reaches PostgreSQL via the compose service name `db`
+# (standard Docker DNS) — no `network_mode` gymnastics needed.
+# ============================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspaces/school-exam-analytics:cached
+    # Keep the container alive so the Codespace stays attached.
+    command: sleep infinity
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://exam:examsecret@db:5432/exam_db
+      PORT: "3000"
+      SESSION_SECRET: codespaces-dev-secret-change-me
+      NODE_ENV: development
+      INIT_CACHE_TTL: "300"
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: examsecret
+      POSTGRES_DB: exam_db
+    # Force PostgreSQL to listen on all interfaces so the app container
+    # can connect across the compose network.
+    command: ["postgres", "-c", "listen_addresses=*"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d exam_db -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres-data:

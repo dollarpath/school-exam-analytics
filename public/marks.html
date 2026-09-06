@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marks Entry — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-page="marks" style="display:flex;flex-direction:column;min-height:100vh;">
+<header class="topbar no-print"><div class="topbar-inner">
+  <div id="php-brand"></div>
+  <div class="topbar-actions" id="php-user"></div>
+</div></header>
+<nav class="navbar no-print"><div class="nav-inner" id="ph-nav"></div></nav>
+
+<main class="page">
+  <h1 style="margin:0 0 6px">Marks Entry</h1>
+  <p class="text-muted text-small" style="margin:0 0 18px">Select a class, subject and exam to enter marks. The active exam is preselected.</p>
+
+  <div class="card">
+    <div class="filter-bar">
+      <div class="field"><label>Class</label><select id="selClass"><option value="">— choose —</option></select></div>
+      <div class="field"><label>Subject</label><select id="selSubject"><option value="">— choose —</option></select></div>
+      <div class="field"><label>Exam</label><select id="selExam"></select></div>
+      <button class="btn btn-primary" id="loadBtn">Load marks</button>
+    </div>
+    <div class="alert alert-warning hidden" id="blockedMsg"></div>
+  </div>
+
+  <div class="card" id="marksCard">
+    <div class="flex-between mb-1">
+      <div id="marksTitle" class="text-muted">Select a class, subject and exam above.</div>
+      <div id="marksInfo"></div>
+    </div>
+    <div id="marksGrid"></div>
+    <div class="flex mt-2 no-print gap-1" id="saveZone" style="display:none">
+      <button class="btn btn-primary" id="saveBtn">Save marks</button>
+      <span class="text-muted text-small" id="saveStatus"></span>
+    </div>
+  </div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  await App.boot('marks');
+  await init();
+});
+
+async function init() {
+  const user = App.state.user;
+  const [classes, subjects, exams, activeExam] = await Promise.all([
+    App.api('/api/classes'), App.api('/api/subjects'), App.api('/api/exams'), App.api('/api/exams/active'),
+  ]);
+
+  let myClasses = classes.classes;
+  let mySubjects = subjects.subjects;
+  // Filter by assignments for named non-admin teachers
+  if (user && !user.is_admin && user.id) {
+    const me = await App.api('/api/teachers');
+    const t = me.teachers.find(x => x.id === user.id);
+    if (t) {
+      const subIds = t.subjects.map(s=>s.id);
+      mySubjects = mySubjects.filter(s => subIds.includes(s.id));
+      const clsIds = t.classes.map(s=>s.id);
+      myClasses = myClasses.filter(cl => clsIds.includes(cl.id));
+    }
+  }
+
+  const clsSel = document.getElementById('selClass');
+  clsSel.innerHTML = '<option value="">— choose —</option>' + myClasses.map(cl => `<option value="${cl.id}">${App.escapeHtml(cl.display_name)}</option>`).join('');
+  const subSel = document.getElementById('selSubject');
+  subSel.innerHTML = '<option value="">— choose —</option>' + mySubjects.map(s => `<option value="${s.id}">${App.escapeHtml(s.full_name)} (${App.escapeHtml(s.code)})</option>`).join('');
+  const examSel = document.getElementById('selExam');
+  examSel.innerHTML = exams.exams.map(e => `<option value="${e.id}" ${activeExam.exam && activeExam.exam.id===e.id?'selected':''}>${App.escapeHtml(e.label)}</option>`).join('');
+  if (activeExam.exam) document.getElementById('marksTitle').textContent = `Active exam: ${activeExam.exam.label}`;
+
+  document.getElementById('loadBtn').addEventListener('click', loadMarks);
+  [clsSel, subSel, examSel].forEach(s => s.addEventListener('change', () => { if (clsSel.value && subSel.value) loadMarks(); }));
+}
+
+async function loadMarks() {
+  const classId = document.getElementById('selClass').value;
+  const subjectId = document.getElementById('selSubject').value;
+  const examId = document.getElementById('selExam').value;
+  if (!classId || !subjectId || !examId) return App.toast('Choose class, subject and exam', 'warn');
+
+  const grid = document.getElementById('marksGrid');
+  grid.innerHTML = '<div class="loading-block">Loading marks…</div>';
+  document.getElementById('marksInfo').innerHTML = '';
+  document.getElementById('saveZone').style.display = 'none';
+  document.getElementById('blockedMsg').classList.add('hidden');
+
+  try {
+    const d = await App.api(`/api/marks/${classId}/${subjectId}/${examId}`);
+    const blocked = !d.entry_open || d.published;
+    if (blocked) {
+      const msg = [];
+      if (!d.entry_open) msg.push('Mark entry is closed for this exam.');
+      if (d.published) msg.push('Results are published and locked.');
+      document.getElementById('blockedMsg').classList.remove('hidden');
+      document.getElementById('blockedMsg').innerHTML = '⚠ ' + msg.join(' ') + ' Only an admin can change this.';
+    }
+
+    document.getElementById('marksTitle').innerHTML = `<strong>${App.escapeHtml(d.exam.label)}</strong> · ${App.escapeHtml(d.subject.full_name)}`;
+    document.getElementById('marksInfo').innerHTML = `<span class="badge ${d.entry_open ? 'badge-success' : 'badge-danger'}">${d.entry_open ? 'Entry open' : 'Entry closed'}</span> <span class="badge ${d.published ? 'badge-info' : 'badge-neutral'}">${d.published ? 'Published' : 'Draft'}</span>`;
+
+    let rows = d.students.map((s, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${App.escapeHtml(s.adm)}</strong></td>
+        <td>${App.escapeHtml(s.full_name)}</td>
+        <td style="width:120px"><input type="number" min="0" step="0.5" class="score-input" data-sid="${s.id}" value="${s.raw !== null ? s.raw : ''}" placeholder="—" ${blocked?'disabled':''}></td>
+        <td style="width:80px"><input type="number" min="1" class="outof-input" data-sid="${s.id}" value="${s.out_of || 100}" title="Out of" ${blocked?'disabled':''}></td>
+        <td class="pct-cell" data-sid="${s.id}">${s.score !== null ? App.pct(s.score) : '—'}</td>
+        <td class="grade-cell" data-sid="${s.id}">${s.score !== null ? `<span class="grade-chip">${App.escapeHtml(s.grade.label)}</span>` : '—'}</td>
+      </tr>`).join('');
+
+    grid.innerHTML = `
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>#</th><th>ADM</th><th>Student</th><th class="num">Score</th><th class="num">Out of</th><th class="num">%</th><th class="num">Grade</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div class="hint mt-1">Enter the raw score and the "out of" value; the percentage and grade update live.</div>`;
+
+    document.getElementById('saveZone').style.display = blocked ? 'none' : 'flex';
+
+    grid.querySelectorAll('.outof-input').forEach(inp => inp.addEventListener('input', () => updateCell(inp.closest('tr').querySelector('.score-input'), d.rubric, true)));
+    grid.querySelectorAll('.score-input').forEach(inp => inp.addEventListener('input', () => updateCell(inp, d.rubric)));
+
+    document.getElementById('saveBtn').onclick = async () => {
+      const entries = [];
+      document.querySelectorAll('.score-input').forEach(inp => {
+        const v = inp.value.trim();
+        if (v === '') return;
+        const row = inp.closest('tr');
+        const out = Number(row.querySelector('.outof-input').value) || 100;
+        const raw = Number(v);
+        const pct = out > 0 ? Math.round((raw / out) * 100) : raw;
+        entries.push({ student_id: Number(inp.dataset.sid), raw, out_of: out, score: Math.max(0, Math.min(100, pct)) });
+      });
+      const st = document.getElementById('saveStatus');
+      st.textContent = 'Saving…';
+      try {
+        await App.api('/api/marks', { method:'POST', body:{ exam_id: Number(examId), subject_id: Number(subjectId), entries } });
+        st.textContent = '✓ Saved ' + entries.length + ' marks'; App.toast('Marks saved'); loadMarks();
+      } catch (err) { st.textContent = ''; App.toast(err.message || 'Save failed', 'error'); }
+    };
+  } catch (err) {
+    grid.innerHTML = `<div class="alert alert-error">${App.escapeHtml(err.message)}</div>`;
+  }
+}
+
+function updateCell(scoreInput, rubric, fromOutOf) {
+  if (!scoreInput) return;
+  const row = scoreInput.closest('tr');
+  const scoreVal = scoreInput.value.trim();
+  const outVal = row.querySelector('.outof-input').value || 100;
+  const pctCell = row.querySelector('.pct-cell');
+  const gradeCell = row.querySelector('.grade-cell');
+  if (scoreVal === '') { pctCell.textContent = '—'; gradeCell.textContent = '—'; return; }
+  const score = Number(scoreVal);
+  const out = Number(outVal) || 100;
+  const pct = out > 0 ? Math.round((score / out) * 100 * 10) / 10 : score;
+  pctCell.textContent = App.pct(pct);
+  const band = gradeBand(pct, rubric);
+  gradeCell.innerHTML = `<span class="grade-chip">${App.escapeHtml(band.label)}</span>`;
+}
+function gradeBand(score, rubric) {
+  const bands = rubric || [];
+  for (const b of bands) if (score >= b.min && score <= b.max) return b;
+  if (!bands.length) return { label: '—' };
+  return bands[bands.length-1];
+}
+</script>
+</body>
+</html>

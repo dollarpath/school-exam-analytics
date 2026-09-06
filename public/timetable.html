@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Editor — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .tt-grid { border-collapse: collapse; width: 100%; }
+  .tt-grid th, .tt-grid td { border: 1px solid var(--border); text-align: center; padding: 6px; font-size: 12px; }
+  .tt-grid th { background: var(--primary-soft); color: var(--primary-dark); }
+  .tt-grid td.period-label { background: var(--bg); font-weight: 700; width: 90px; }
+  .tt-cell { min-height: 46px; cursor: pointer; }
+  .tt-cell:hover { background: var(--primary-soft); }
+  .tt-cell .subj { font-weight: 700; color: var(--primary); }
+  .tt-cell .teach { font-size: 11px; color: var(--muted); }
+  .tt-cell.empty { color: var(--muted); font-size: 12px; }
+  .tt-cell.lunch { background: var(--secondary-soft); cursor: default; }
+</style>
+</head>
+<body data-page="timetable" style="display:flex;flex-direction:column;min-height:100vh;">
+<header class="topbar no-print"><div class="topbar-inner">
+  <div id="php-brand"></div>
+  <div class="topbar-actions" id="php-user"></div>
+</div></header>
+<nav class="navbar no-print"><div class="nav-inner" id="ph-nav"></div></nav>
+
+<main class="page">
+  <h1 style="margin:0 0 6px">Timetable</h1>
+  <p class="text-muted text-small" style="margin:0 0 18px">Generate and edit a class timetable. Click any cell to assign a subject and teacher.</p>
+
+  <div class="card no-print">
+    <div class="filter-bar">
+      <div class="field"><label>Term</label><select id="selTerm"></select></div>
+      <div class="field"><label>Class</label><select id="selClass"></select></div>
+      <button class="btn btn-primary" id="loadBtn">Load</button>
+      <button class="btn btn-secondary" id="genBtn">⚡ Auto-generate</button>
+      <button class="btn btn-outline" id="saveBtn">💾 Save</button>
+      <a href="/timetable-view" class="btn btn-ghost">View schedules →</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between mb-1">
+      <h2 class="card-title" id="ttTitle">—</h2>
+      <span class="text-small text-muted" id="ttInfo"></span>
+    </div>
+    <div id="ttGrid"><div class="loading-block">Select a term and class.</div></div>
+  </div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () { await App.boot('timetable'); await init(); });
+let META = null, SLOTS = null;
+
+async function init() {
+  const [classes, subjects, teachers] = await Promise.all([App.api('/api/classes'), App.api('/api/subjects'), App.api('/api/teachers')]);
+  META = { classes: classes.classes, subjects: subjects.subjects, teachers: teachers.teachers };
+  document.getElementById('selTerm').innerHTML = '<option value="">— term —</option><option value="1">Term 1</option><option value="2">Term 2</option><option value="3">Term 3</option>';
+  document.getElementById('selClass').innerHTML = '<option value="">— class —</option>' + classes.classes.map(cl => `<option value="${cl.id}">${App.escapeHtml(cl.display_name)}</option>`).join('');
+  document.getElementById('loadBtn').addEventListener('click', load);
+  document.getElementById('saveBtn').addEventListener('click', save);
+  document.getElementById('genBtn').addEventListener('click', generate);
+}
+
+async function load() {
+  const classId = document.getElementById('selClass').value;
+  const termId = document.getElementById('selTerm').value;
+  if (!classId || !termId) return App.toast('Choose term and class','warn');
+  const termRow = { [classId+'_'+termId]: termId };
+  // get term id from api - the timetable route needs real term id. We'll find it via exams? Simplest: /api/exams maps term_number to term_id.
+  const exams = await App.api('/api/exams');
+  const ex = exams.exams.find(e => e.term_number == termId);
+  if (!ex) return App.toast('No term found for this academic year','warn');
+  const realTermId = ex.term_id;
+  const d = await App.api(`/api/timetable/${classId}/${realTermId}`);
+  SLOTS = d;
+  draw();
+}
+
+function draw() {
+  const grid = document.getElementById('ttGrid');
+  const days = SLOTS.days, periods = SLOTS.periodCount, slots = SLOTS.slots;
+  document.getElementById('ttTitle').textContent = `${SLOTS.class.display_name} — ${SLOTS.term.label}`;
+  document.getElementById('ttInfo').textContent = `${slots.length} periods assigned · Period ${SLOTS.periodConfig.length} configured`;
+
+  // build lookup
+  const cellMap = {};
+  slots.forEach(s => { cellMap[s.day+'|'+s.period] = s; });
+  const breakAfter = {};
+  SLOTS.periodConfig.forEach(p => { if (p.break_after_label) breakAfter[p.period] = p.break_after_label; });
+
+  let html = '<div class="table-wrap"><table class="tt-grid"><thead><tr><th>Day</th>';
+  for (let p=1;p<=periods;p++) html += `<th>P${p}</th>`;
+  html += '</tr></thead><tbody>';
+
+  const dayName = { MON:'Monday', TUE:'Tuesday', WED:'Wednesday', THU:'Thursday', FRI:'Friday' };
+  days.forEach(day => {
+    html += `<tr><td class="period-label">${dayName[day]||day}</td>`;
+    for (let p=1;p<=periods;p++) {
+      const key = day+'|'+p;
+      const cell = cellMap[key];
+      if (cell) {
+        html += `<td class="tt-cell" data-day="${day}" data-period="${p}">
+          <div class="subj">${App.escapeHtml(cell.subject_code || '—')}</div>
+          <div class="teach">${App.escapeHtml(cell.teacher_name || '')}</div></td>`;
+      } else {
+        html += `<td class="tt-cell empty" data-day="${day}" data-period="${p}">+ add</td>`;
+      }
+    }
+    html += '</tr>';
+  });
+  html += '<tr><td class="period-label">Time</td>';
+  SLOTS.periodConfig.forEach(p => { html += `<td>${p.start_time.slice(0,5)}<br>${p.end_time.slice(0,5)}</td>`; });
+  html += '</tr></tbody></table></div>';
+
+  grid.innerHTML = html;
+  grid.querySelectorAll('.tt-cell').forEach(cell => cell.addEventListener('click', () => editCell(dayName[cell.dataset.day], Number(cell.dataset.day), Number(cell.dataset.period), cellMap[cell.dataset.day+'|'+cell.dataset.period])));
+}
+
+function editsSaved() {}
+
+function editCell(dayName, day, period, existing) {
+  const subjOpts = META.subjects.map(s => `<option value="${s.id}" ${existing&&existing.subject_id==s.id?'selected':''}>${App.escapeHtml(s.code)} — ${App.escapeHtml(s.full_name)}</option>`).join('');
+  const teachOpts = '<option value="">— (none) —</option>' + META.teachers.map(t => `<option value="${t.id}" ${existing&&existing.teacher_id==t.id?'selected':''}>${App.escapeHtml(t.full_name)}</option>`).join('');
+  App.openModal({
+    title:`${dayName} — Period ${period}`,
+    body:`<div class="field"><label>Subject</label><select id="ec_subj">${subjOpts}</select></div>
+          <div class="field"><label>Teacher</label><select id="ec_teach">${teachOpts}</select></div>
+          <div class="field"><label><input type="checkbox" id="ec_clear" style="width:auto"> Clear this period</label></div>`,
+    footer:`<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" id="ec_save">Assign</button>`
+  });
+  document.getElementById('ec_save').addEventListener('click', async () => {
+    const clear = document.getElementById('ec_clear').checked;
+    const subject_id = clear ? null : Number(document.getElementById('ec_subj').value) || null;
+    const teacher_id = clear ? null : Number(document.getElementById('ec_teach').value) || null;
+    // update local slots
+    const existingIdx = SLOTS.slots.findIndex(s => s.day===day && s.period===period);
+    const rec = { day, period, subject_id, teacher_id };
+    if (subject_id === null && teacher_id === null) {
+      if (existingIdx >= 0) SLOTS.slots.splice(existingIdx, 1);
+    } else {
+      // find subject/teacher names
+      const subj = META.subjects.find(s=>s.id===subject_id);
+      const teach = META.teachers.find(t=>t.id===teacher_id);
+      if (existingIdx >= 0) SLOTS.slots[existingIdx] = { ...SLOTS.slots[existingIdx], ...rec, subject_code: subj?subj.code:null, teacher_name: teach?teach.full_name:null };
+      else { SLOTS.slots.push({ ...rec, subject_code: subj?subj.code:null, teacher_name: teach?teach.full_name:null }); }
+    }
+    App.closeModal();
+    draw();
+  });
+}
+
+async function generate() {
+  const termId = document.getElementById('selTerm').value;
+  if (!termId) return App.toast('Choose term','warn');
+  const exams = await App.api('/api/exams');
+  const ex = exams.exams.find(e => e.term_number == termId);
+  if (!ex) return App.toast('No term','warn');
+  const r = await App.api('/api/timetable/generate', { method:'POST', body:{ term_id: ex.term_id } });
+  App.toast(`Generated timetable for ${r.generatedClasses} class(es)`);
+  if (document.getElementById('selClass').value) load();
+}
+
+async function save() {
+  if (!SLOTS) return App.toast('Load a timetable first','warn');
+  const classId = document.getElementById('selClass').value;
+  const termId = document.getElementById('selTerm').value;
+  const exams = await App.api('/api/exams');
+  const ex = exams.exams.find(e => e.term_number == termId);
+  const payload = SLOTS.slots.map(s => ({ day: s.day, period: s.period, subject_id: s.subject_id, teacher_id: s.teacher_id }));
+  await App.api(`/api/timetable/${classId}/${ex.term_id}`, { method:'POST', body:{ slots: payload } });
+  App.toast('Timetable saved');
+}
+</script>
+</body>
+</html>

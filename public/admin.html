@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — School Exam Analytics</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .admin-nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mini-tab { padding: 7px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; background: #f1f5f9; color: var(--muted); }
+  .mini-tab.active { background: var(--primary); color: #fff; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .switch { position: relative; width: 44px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px; transition: .2s; cursor: pointer; }
+  .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: var(--secondary); }
+  .switch input:checked + .slider:before { transform: translateX(20px); }
+</style>
+</head>
+<body data-page="admin" style="display:flex;flex-direction:column;min-height:100vh;">
+<header class="topbar no-print"><div class="topbar-inner">
+  <div id="php-brand"></div>
+  <div class="topbar-actions" id="php-user"></div>
+</div></header>
+<nav class="navbar no-print"><div class="nav-inner" id="ph-nav"></div></nav>
+
+<main class="page">
+  <div class="flex-between mb-2">
+    <div>
+      <h1 style="margin:0 0 4px">Admin Panel</h1>
+      <p class="text-muted text-small" style="margin:0">Manage school details, exams, classes, subjects, teachers and students.</p>
+    </div>
+  </div>
+  <div class="admin-nav mb-2 no-print">
+    <div class="mini-tab active" data-sec="school">School</div>
+    <div class="mini-tab" data-sec="exams">Exams</div>
+    <div class="mini-tab" data-sec="classes">Classes</div>
+    <div class="mini-tab" data-sec="subjects">Subjects</div>
+    <div class="mini-tab" data-sec="teachers">Teachers</div>
+    <div class="mini-tab" data-sec="students">Students</div>
+    <div class="mini-tab" data-sec="periods">Periods</div>
+  </div>
+  <div id="content"><div class="loading-block">Loading…</div></div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  await App.boot('admin');
+  document.querySelectorAll('.mini-tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.mini-tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    render(t.dataset.sec);
+  }));
+  render('school');
+});
+
+async function render(sec) {
+  const c = document.getElementById('content');
+  try {
+    if (sec === 'school') return renderSchool(c);
+    if (sec === 'exams') return renderExams(c);
+    if (sec === 'classes') return renderClasses(c);
+    if (sec === 'subjects') return renderSubjects(c);
+    if (sec === 'teachers') return renderTeachers(c);
+    if (sec === 'students') return renderStudents(c);
+    if (sec === 'periods') return renderPeriods(c);
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-error">${App.escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ─────────── SCHOOL ───────────
+async function renderSchool(c) {
+  const [school, init] = await Promise.all([App.api('/api/school'), App.api('/api/init')]);
+  const s = school.school || {};
+  const cfg = (init && init.config) || {};
+  c.innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <h2 class="card-title">School Information</h2>
+        <div class="field"><label>School name</label><input type="text" id="sc_name" value="${App.escapeHtml(s.name || '')}"></div>
+        <div class="field"><label>Motto</label><input type="text" id="sc_motto" value="${App.escapeHtml(s.motto || '')}"></div>
+        <div class="field"><label>P.O Box / Address</label><input type="text" id="sc_address" value="${App.escapeHtml(s.address || '')}"></div>
+        <div class="grid-2">
+          <div class="field"><label>Primary colour</label><input type="color" id="sc_primary" value="${s.primary_color || '#1a3a6b'}"></div>
+          <div class="field"><label>Secondary colour</label><input type="color" id="sc_secondary" value="${s.secondary_color || '#1e7a3a'}"></div>
+        </div>
+        <div class="field"><label>Academic year</label><input type="number" id="sc_year" value="${cfg.academic_year || 2026}" min="2000" max="2100"></div>
+        <div class="field"><label>Terms per year</label>
+          <select id="sc_terms"><option value="2" ${cfg.no_of_terms==2?'selected':''}>2</option><option value="3" ${cfg.no_of_terms==3?'selected':''}>3</option></select></div>
+        <div class="field"><label>Exams per term</label>
+          <select id="sc_exams"><option value="MID" ${cfg.exams_per_term==='MID'?'selected':''}>Mid only</option><option value="END" ${cfg.exams_per_term==='END'?'selected':''}>End only</option><option value="BOTH" ${cfg.exams_per_term==='BOTH'||!cfg.exams_per_term?'selected':''}>Both</option></select></div>
+        <div class="field"><label>New site access password (leave blank to keep current)</label><input type="password" id="sc_sitepass" placeholder="••••••••"></div>
+        <button class="btn btn-primary" id="saveSchool">Save changes</button>
+      </div>
+      <div class="card">
+        <h2 class="card-title">Logo</h2>
+        <p class="card-sub">Upload a PNG/JPG; it's resized to max 300×300.</p>
+        <div id="logoSide"></div>
+        <input type="file" id="logoUp" accept="image/png,image/jpeg" class="hidden" style="display:none">
+        <button class="btn btn-outline" id="logoBtn">Upload new logo</button>
+        <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+        <h3 class="section-title">Grading Rubric</h3>
+        <div id="rubricEditor" style="font-size:13px"></div>
+        <button class="btn btn-secondary mt-1" id="saveRubric">Save rubric</button>
+        <div class="hint mt-1">These bands are used as the global default for all subjects.</div>
+      </div>
+    </div>`;
+
+  // logo preview
+  const logoHtml = s.logo_path ? `<img src="${s.logo_path}" style="max-height:80px;margin-bottom:10px">` :
+    '<div class="text-muted text-small mb-1">No logo uploaded.</div>';
+  document.getElementById('logoSide').innerHTML = logoHtml;
+  document.getElementById('logoBtn').addEventListener('click', () => document.getElementById('logoUp').click());
+  document.getElementById('logoUp').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('logo', file);
+    try { const d = await App.api('/api/upload/logo', { method:'POST', form: fd }); App.toast('Logo uploaded'); render('school'); }
+    catch (err) { App.toast(err.message, 'error'); }
+  });
+  document.getElementById('saveSchool').addEventListener('click', async () => {
+    const body = {
+      name: document.getElementById('sc_name').value,
+      motto: document.getElementById('sc_motto').value,
+      address: document.getElementById('sc_address').value,
+      primary_color: document.getElementById('sc_primary').value,
+      secondary_color: document.getElementById('sc_secondary').value,
+      academic_year: Number(document.getElementById('sc_year').value),
+      no_of_terms: Number(document.getElementById('sc_terms').value),
+      exams_per_term: document.getElementById('sc_exams').value,
+    };
+    const sp = document.getElementById('sc_sitepass').value;
+    if (sp) body.teacher_site_password = sp;
+    await App.api('/api/school', { method:'PUT', body });
+    App.toast('School saved'); App.loadInit();
+  });
+
+  renderRubricEditor();
+}
+async function renderRubricEditor() {
+  const init = App.state.init;
+  const rubric = (init && init.default_rubric) || [];
+  document.getElementById('rubricEditor').innerHTML = rubric.map((b, i) => `
+    <div class="rubric-row" style="display:grid;grid-template-columns:52px 58px 58px 44px 1fr;gap:6px;margin-bottom:6px;">
+      <input value="${b.band}" data-r="${i}" data-k="band">
+      <input type="number" value="${b.min}" data-r="${i}" data-k="min">
+      <input type="number" value="${b.max}" data-r="${i}" data-k="max">
+      <input type="number" value="${b.points}" data-r="${i}" data-k="points">
+      <input value="${b.grade}" data-r="${i}" data-k="grade">
+    </div>`).join('');
+}
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'saveRubric') {
+    const rows = [...document.querySelectorAll('#rubricEditor input[data-r]')];
+    const map = {};
+    rows.forEach(inp => { const i = inp.dataset.r; if (!map[i]) map[i] = {}; map[i][inp.dataset.k] = inp.value; });
+    const rubric = Object.values(map);
+    await App.api('/api/school', { method:'PUT', body: { rubric_global: rubric } });
+    App.toast('Rubric saved'); App.loadInit();
+  }
+});
+
+// ─────────── EXAMS ───────────
+async function renderExams(c) {
+  const d = await App.api('/api/exams');
+  const exams = d.exams;
+  const terms = d.terms || [];
+  let html = `<div class="grid-2">
+  <div class="card"><h2 class="card-title">Set up an exam</h2><p class="card-sub">Create an exam manually or upload several exams from a CSV file.</p>
+    <div class="field"><label>Term</label><select id="newExamTerm">${terms.map(t => `<option value="${t.id}">${t.year} · Term ${t.number}</option>`).join('')}</select></div>
+    <div class="field"><label>Exam type</label><select id="newExamType"><option value="MID">Mid term</option><option value="END">End term</option></select></div>
+    <div class="field"><label>Exam label</label><input id="newExamLabel" placeholder="e.g. Term 1 Mid Term"></div>
+    <button class="btn btn-primary" id="addExam" ${terms.length ? '' : 'disabled'}>Add exam</button>
+    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+    <div class="field"><label>Upload exam setup CSV</label><input type="file" id="examCsv" accept=".csv,text/csv"></div>
+    <div class="hint">Required columns: <code>term,type,label</code>. Type must be <code>MID</code> or <code>END</code>; term is 1, 2 or 3.</div>
+    <button class="btn btn-outline mt-1" id="uploadExams" ${terms.length ? '' : 'disabled'}>Upload CSV</button>
+  </div>
+  <div class="card"><h2 class="card-title">Exam controls</h2><p class="card-sub">Activate a single exam, open/close mark entry, and publish results.</p>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Exam</th><th>Term</th><th>Year</th><th>Status</th><th class="no-print">Actions</th></tr></thead><tbody>`;
+  exams.forEach(e => {
+    html += `<tr>
+      <td><strong>${App.escapeHtml(e.label)}</strong></td>
+      <td>${e.term_number} · ${App.escapeHtml(e.term_label)}</td>
+      <td>${e.year}</td>
+      <td>
+        ${e.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-neutral">Inactive</span>'}
+        ${e.entry_open ? '<span class="badge badge-warning">Entry open</span>' : ''}
+        ${e.published ? '<span class="badge badge-info">Published</span>' : ''}
+      </td>
+      <td class="no-print">
+        <button class="btn btn-sm ${e.is_active?'btn-ghost':'btn-primary'}" data-act="${e.id}">${e.is_active?'Active ✓':'Activate'}</button>
+        <button class="btn btn-sm ${e.entry_open?'btn-ghost':'btn-outline'}" data-entry="${e.id}">${e.entry_open?'Close entry':'Open entry'}</button>
+        <button class="btn btn-sm ${e.published?'btn-ghost':'btn-secondary'} ${e.published?'unpub':''}" data-pub="${e.id}">${e.published?'Unpublish':'Publish'}</button>
+        <button class="btn btn-danger btn-sm" data-del-exam="${e.id}" data-name="${App.escapeHtml(e.label)}">Delete</button>
+      </td></tr>`;
+  });
+  html += '</tbody></table></div></div></div>';
+  c.innerHTML = html;
+
+  c.querySelector('#addExam')?.addEventListener('click', async () => {
+    const term_id = Number(c.querySelector('#newExamTerm').value);
+    const type = c.querySelector('#newExamType').value;
+    const label = c.querySelector('#newExamLabel').value.trim();
+    if (!label) return App.toast('Enter an exam label', 'warn');
+    await App.api('/api/exams', { method:'POST', body:{ term_id, type, label } });
+    App.toast('Exam added'); renderExams(c);
+  });
+  c.querySelector('#uploadExams')?.addEventListener('click', async () => {
+    const file = c.querySelector('#examCsv').files[0];
+    if (!file) return App.toast('Choose a CSV file first', 'warn');
+    const form = new FormData(); form.append('exam_file', file);
+    const result = await App.api('/api/exams/import', { method:'POST', form });
+    App.toast(`${result.added} exam${result.added === 1 ? '' : 's'} uploaded`); renderExams(c);
+  });
+
+  c.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async () => {
+    await App.api('/api/exams/'+b.dataset.act, { method:'PUT', body:{ is_active:true } }); App.toast('Exam activated'); renderExams(c); }));
+  c.querySelectorAll('[data-entry]').forEach(b => b.addEventListener('click', async () => {
+    const e = exams.find(x => x.id == b.dataset.entry);
+    await App.api('/api/exams/'+b.dataset.entry, { method:'PUT', body:{ entry_open: !e.entry_open } }); App.toast('Mark entry updated'); renderExams(c); }));
+  c.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', async () => {
+    const e = exams.find(x => x.id == b.dataset.pub);
+    await App.api('/api/exams/'+b.dataset.pub, { method:'PUT', body:{ published: !e.published } }); App.toast('Publication updated'); renderExams(c); }));
+  c.querySelectorAll('[data-del-exam]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete ${b.dataset.name}? This also deletes its marks.`, async () => {
+    await App.api('/api/exams/'+b.dataset.delExam, { method:'DELETE' }); App.toast('Exam deleted'); renderExams(c); })));
+}
+
+// ─────────── CLASSES ───────────
+async function renderClasses(c) {
+  const d = await App.api('/api/classes');
+  const classes = d.classes;
+  let html = `<div class="card"><h2 class="card-title">Classes</h2>
+    <div class="flex mb-1">
+      <input id="nc_name" placeholder="Class e.g. Grade 7" style="max-width:200px">
+      <input id="nc_stream" placeholder="Stream e.g. East" style="max-width:160px">
+      <button class="btn btn-secondary btn-sm" id="addClass">+ Add class</button>
+    </div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Class</th><th>Stream</th><th>Students</th><th class="no-print">Actions</th></tr></thead><tbody>`;
+  classes.forEach(cl => {
+    html += `<tr><td><strong>${App.escapeHtml(cl.name)}</strong></td><td>${App.escapeHtml(cl.stream || '—')}</td><td>${cl.student_count}</td>
+      <td class="no-print"><button class="btn btn-danger btn-sm" data-del="${cl.id}" data-name="${App.escapeHtml(cl.display_name)}">Delete</button></td></tr>`;
+  });
+  html += '</tbody></table></div></div>';
+  c.innerHTML = html;
+  c.querySelector('#addClass').addEventListener('click', async () => {
+    const name = c.querySelector('#nc_name').value.trim(); const stream = c.querySelector('#nc_stream').value.trim();
+    if (!name) return App.toast('Enter class name', 'warn');
+    await App.api('/api/classes', { method:'POST', body:{ name, stream } }); App.toast('Class added'); renderClasses(c);
+  });
+  c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete ${b.dataset.name}? This will not delete its students.`, async () => {
+    await App.api('/api/classes/'+b.dataset.del, { method:'DELETE' }); App.toast('Class deleted'); renderClasses(c); })));
+}
+
+// ─────────── SUBJECTS ───────────
+async function renderSubjects(c) {
+  const d = await App.api('/api/subjects');
+  const subjects = d.subjects;
+  let html = `<div class="card"><h2 class="card-title">Subjects</h2>
+    <div class="flex mb-1">
+      <input id="ns_code" placeholder="Code e.g. ENG" style="max-width:110px">
+      <input id="ns_name" placeholder="Full name e.g. English">
+      <input id="ns_ppw" type="number" value="5" placeholder="Per/wk" style="max-width:90px">
+      <button class="btn btn-secondary btn-sm" id="addSubject">+ Add subject</button>
+    </div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Periods/wk</th><th>Rubric</th><th class="no-print">Actions</th></tr></thead><tbody>`;
+  subjects.forEach(s => {
+    html += `<tr><td><strong>${App.escapeHtml(s.code)}</strong></td><td>${App.escapeHtml(s.full_name)}</td><td>${s.periods_per_week}</td>
+      <td>${s.uses_global ? '<span class="badge badge-neutral">Global default</span>' : '<span class="badge badge-info">Custom</span>'}</td>
+      <td class="no-print"><button class="btn btn-ghost btn-sm" data-edit="${s.id}" data-json="${App.escapeHtml(JSON.stringify(s))}">Edit</button><button class="btn btn-danger btn-sm" data-del="${s.id}" data-name="${App.escapeHtml(s.code)}">Delete</button></td></tr>`;
+  });
+  html += '</tbody></table></div></div>';
+  c.innerHTML = html;
+  c.querySelector('#addSubject').addEventListener('click', async () => {
+    const code = c.querySelector('#ns_code').value.trim().toUpperCase(); const full = c.querySelector('#ns_name').value.trim();
+    if (!code || !full) return App.toast('Enter code and name', 'warn');
+    await App.api('/api/subjects', { method:'POST', body:{ code, full_name: full, periods_per_week: Number(c.querySelector('#ns_ppw').value)||5 } });
+    App.toast('Subject added'); App.loadInit(); renderSubjects(c);
+  });
+  c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete subject ${b.dataset.name}?`, async () => {
+    await App.api('/api/subjects/'+b.dataset.del, { method:'DELETE' }); App.toast('Subject deleted'); renderSubjects(c); })));
+  c.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
+    const s = JSON.parse(b.dataset.json);
+    App.openModal({ title:`Edit ${s.code}`,
+      body:`<div class="field"><label>Code</label><input id="me_code" value="${App.escapeHtml(s.code)}"></div>
+            <div class="field"><label>Full name</label><input id="me_name" value="${App.escapeHtml(s.full_name)}"></div>
+            <div class="field"><label>Periods per week</label><input type="number" id="me_ppw" value="${s.periods_per_week}"></div>
+            <div class="field"><label>Custom rubric (JSON) — leave blank for global</label><textarea id="me_rubric" rows="6" placeholder="[{\"band\":\"EE1\",\"min\":90,\"max\":100,\"points\":12,\"grade\":\"A\"}]">${App.escapeHtml(s.rubric && !s.uses_global ? JSON.stringify(s.rubric) : '')}</textarea></div>`,
+      footer:`<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" id="me_save">Save</button>` });
+    c.querySelector('#me_save').addEventListener('click', async () => {
+      const rubricVal = c.querySelector('#me_rubric').value.trim();
+      const body = { full_name: c.querySelector('#me_name').value, periods_per_week: Number(c.querySelector('#me_ppw').value)||5 };
+      if (rubricVal) { try { body.rubric = JSON.parse(rubricVal); } catch(e){ return App.toast('Invalid rubric JSON','error'); } }
+      else body.rubric = null;
+      await App.api('/api/subjects/'+s.id, { method:'PUT', body });
+      App.closeModal(); App.toast('Subject updated'); renderSubjects(c);
+    });
+  }));
+}
+
+// ─────────── TEACHERS ───────────
+async function renderTeachers(c) {
+  const [d, subjects, classes] = await Promise.all([App.api('/api/teachers'), App.api('/api/subjects'), App.api('/api/classes')]);
+  const teachers = d.teachers;
+  let html = `<div class="card"><h2 class="card-title">Teachers</h2>
+    <button class="btn btn-secondary btn-sm mb-1" id="addTeacher">+ Add teacher</button>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Username</th><th>Max periods</th><th>Role</th><th>Subjects</th><th>Classes</th><th class="no-print">Actions</th></tr></thead><tbody>`;
+  teachers.forEach(t => {
+    html += `<tr><td><strong>${App.escapeHtml(t.full_name)}</strong></td><td>${App.escapeHtml(t.username)}</td><td>${t.max_periods}</td>
+      <td>${t.is_admin?'<span class="badge badge-success">Admin</span>':''} ${t.is_hoi?'<span class="badge badge-info">HOI</span>':''}</td>
+      <td class="text-small">${(t.subjects||[]).map(s=>`<span class="chip">${App.escapeHtml(s.code)}</span>`).join(' ')}</td>
+      <td class="text-small">${(t.classes||[]).map(s=>`<span class="chip">${App.escapeHtml(s.name)}${s.is_class_teacher?' (CT)':''}</span>`).join(' ')}</td>
+      <td class="no-print"><button class="btn btn-ghost btn-sm" data-edit="${t.id}" data-json="${App.escapeHtml(JSON.stringify(t))}">Edit</button><button class="btn btn-danger btn-sm" data-del="${t.id}" data-name="${App.escapeHtml(t.full_name)}">Delete</button></td></tr>`;
+  });
+  html += '</tbody></table></div></div>';
+  c.innerHTML = html;
+
+  c.querySelector('#addTeacher').addEventListener('click', () => teacherModal(c, null, subjects, classes));
+  c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete teacher ${b.dataset.name}?`, async () => {
+    await App.api('/api/teachers/'+b.dataset.del, { method:'DELETE' }); App.toast('Teacher deleted'); renderTeachers(c); })));
+  c.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => teacherModal(c, JSON.parse(b.dataset.json), subjects, classes)));
+}
+
+function teacherModal(c, t, subjects, classes) {
+  const isEdit = !!t;
+  t = t || { full_name:'', username:'', max_periods:30, is_hoi:false, subjects:[], classes:[] };
+  const subIds = (t.subjects||[]).map(s=>s.id);
+  const clsIds = (t.classes||[]).map(s=>s.id);
+  const ctId = (t.classes||[]).find(s=>s.is_class_teacher);
+  const html = `
+    <div class="field"><label>Full name</label><input id="tf_name" value="${App.escapeHtml(t.full_name)}"></div>
+    <div class="field"><label>Username</label><input id="tf_user" value="${App.escapeHtml(t.username)}"></div>
+    <div class="field"><label>Password ${isEdit?'(blank to keep)':''}</label><input type="password" id="tf_pass"></div>
+    <div class="field"><label>Max periods/week</label><input type="number" id="tf_max" value="${t.max_periods}"></div>
+    <div class="field"><label>Subjects taught</label><div class="chips" id="tf_subjects">${subjects.subjects.map(s=>`<span class="chip" data-s="${s.id}" style="opacity:${subIds.includes(s.id)?'1':'0.45'}">${App.escapeHtml(s.code)}</span>`).join('')}</div></div>
+    <div class="field"><label>Classes responsible for (click star = class teacher)</label><div class="chips" id="tf_classes">${classes.classes.map(cl=>`<span class="chip" data-c="${cl.id}" data-name="${App.escapeHtml(cl.display_name)}" style="opacity:${clsIds.includes(cl.id)||ctId&&ctId.id===cl.id?'1':'0.45'}">${App.escapeHtml(cl.display_name)}${ctId&&ctId.id===cl.id?' (CT)':''}</span>`).join('')}</div></div>
+    <div class="field"><label><input type="checkbox" id="tf_hoi" style="width:auto" ${t.is_hoi?'checked':''}> Head of Institution</label></div>`;
+  App.openModal({ title: isEdit ? `Edit ${t.full_name}` : 'Add Teacher', body: html,
+    footer:`<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" id="tf_save">Save</button>` });
+
+  const chosenSubs = new Set(subIds);
+  document.querySelectorAll('#tf_subjects .chip').forEach(ch => ch.addEventListener('click', () => {
+    const id = Number(ch.dataset.s);
+    if (chosenSubs.has(id)) { chosenSubs.delete(id); ch.style.opacity='0.45'; } else { chosenSubs.add(id); ch.style.opacity='1'; } }));
+  const chosenCls = new Set(clsIds);
+  let chosenCT = ctId ? ctId.id : null;
+  document.querySelectorAll('#tf_classes .chip').forEach(ch => ch.addEventListener('click', (e) => {
+    const id = Number(ch.dataset.c);
+    if (e.target.textContent.trim() === '★') return;
+    if (chosenCls.has(id)) { chosenCls.delete(id); if (chosenCT===id) chosenCT=null; ch.style.opacity='0.45'; ch.innerHTML = `${App.escapeHtml(ch.dataset.name)}<span class="chip-remove">★</span>`; }
+    else { chosenCls.add(id); ch.style.opacity='1'; }
+  }));
+  document.querySelectorAll('#tf_classes .chip .chip-remove').forEach(star => star.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = Number(star.parentElement.dataset.c);
+    chosenCT = chosenCT === id ? null : id;
+    document.querySelectorAll('#tf_classes .chip').forEach(ch => {
+      const name = ch.dataset.name;
+      ch.innerHTML = `${name}${chosenCT===Number(ch.dataset.c)?' (CT)':''}<span class="chip-remove">★</span>`;
+      ch.style.opacity = (chosenCls.has(Number(ch.dataset.c)) || chosenCT===Number(ch.dataset.c)) ? '1':'0.45';
+    });
+  }));
+
+  c.querySelector('#tf_save').addEventListener('click', async () => {
+    const body = { full_name: document.getElementById('tf_name').value, username: document.getElementById('tf_user').value,
+      password: document.getElementById('tf_pass').value,
+      max_periods: Number(document.getElementById('tf_max').value)||30,
+      is_hoi: document.getElementById('tf_hoi').checked,
+      subjects: [...chosenSubs],
+      classes: [...chosenCls].map(id => ({ id, is_class_teacher: chosenCT===id })),
+    };
+    if (!body.username) return App.toast('Username required','warn');
+    if (!isEdit && !body.password) return App.toast('Password required','warn');
+    await App.api('/api/teachers' + (isEdit ? '/'+t.id : ''), { method: isEdit?'PUT':'POST', body });
+    App.closeModal(); App.toast('Saved'); renderTeachers(c);
+  });
+}
+
+// ─────────── STUDENTS ───────────
+async function renderStudents(c) {
+  const [d, classes] = await Promise.all([App.api('/api/students'), App.api('/api/classes')]);
+  const students = d.students;
+  const classOpts = classes.classes.map(cl => `<option value="${cl.id}">${App.escapeHtml(cl.display_name)}</option>`).join('');
+  let html = `<div class="card"><h2 class="card-title">Students</h2>
+    <div class="flex mb-1">
+      <input id="ns_adm" placeholder="ADM no." style="max-width:130px">
+      <input id="ns_name" placeholder="Full name">
+      <select id="ns_class" style="max-width:200px">${classOpts}</select>
+      <button class="btn btn-secondary btn-sm" id="addStudent">+ Add</button>
+    </div>
+    <div class="flex mb-2">
+      <a class="btn btn-ghost btn-sm" onclick="dlCsv()">⬇ Template</a>
+      <button class="btn btn-outline btn-sm" id="csvBtn">Import CSV</button>
+      <input type="file" id="csvFile" accept=".csv" class="hidden" style="display:none">
+    </div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>ADM</th><th>Name</th><th>Class</th><th class="no-print">Actions</th></tr></thead><tbody>
+      ${students.map(s => `<tr><td><strong>${App.escapeHtml(s.adm)}</strong></td><td>${App.escapeHtml(s.full_name)}</td><td>${s.class ? App.escapeHtml(s.class) : '<span class="badge badge-warning">No class</span>'}</td>
+        <td class="no-print"><button class="btn btn-danger btn-sm" data-del="${s.id}" data-name="${App.escapeHtml(s.full_name)}">Delete</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  c.innerHTML = html;
+  c.querySelector('#addStudent').addEventListener('click', async () => {
+    const adm = c.querySelector('#ns_adm').value.trim(); const name = c.querySelector('#ns_name').value.trim();
+    if (!adm || !name) return App.toast('Enter ADM and name','warn');
+    await App.api('/api/students', { method:'POST', body:{ adm, name, class_id: Number(c.querySelector('#ns_class').value)||null } });
+    App.toast('Student added'); renderStudents(c);
+  });
+  c.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => App.confirmDialog(`Delete student ${b.dataset.name}?`, async () => {
+    await App.api('/api/students/'+b.dataset.del, { method:'DELETE' }); App.toast('Student deleted'); renderStudents(c); })));
+  c.querySelector('#csvBtn').addEventListener('click', () => c.querySelector('#csvFile').click());
+  c.querySelector('#csvFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    const r = await App.api('/api/students/import', { method:'POST', form: fd });
+    App.toast(`Imported ${r.added}, updated ${r.updated}, skipped ${r.skipped}`);
+    renderStudents(c);
+  });
+}
+function dlCsv() {
+  const blob = new Blob(['ADM,Name,Class\nADM001,John Doe,Grade 7 East\n'], { type:'text/csv' });
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='students_template.csv'; a.click();
+}
+
+// ─────────── PERIODS ───────────
+async function renderPeriods(c) {
+  const d = await App.api('/api/periods');
+  let html = `<div class="card"><h2 class="card-title">School Day / Period Times</h2>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Period</th><th>Start</th><th>End</th><th>Break after</th><th>Break (min)</th></tr></thead><tbody>
+    ${d.periods.map(p => `<tr>
+      <td>${p.period}</td>
+      <td><input type="time" data-a="${p.period}" data-k="start_time" value="${p.start_time}"></td>
+      <td><input type="time" data-a="${p.period}" data-k="end_time" value="${p.end_time}"></td>
+      <td><input type="text" data-a="${p.period}" data-k="break_after_label" value="${App.escapeHtml(p.break_after_label||'')}"></td>
+      <td><input type="number" data-a="${p.period}" data-k="break_after_minutes" value="${p.break_after_minutes||''}" style="width:80px"></td></tr>`).join('')}
+    </tbody></table></div>
+    <button class="btn btn-primary mt-1" id="savePeriods">Save period times</button></div>`;
+  c.innerHTML = html;
+  c.querySelector('#savePeriods').addEventListener('click', async () => {
+    const map = {};
+    c.querySelectorAll('input[data-a]').forEach(inp => { const a=inp.dataset.a; if(!map[a]) map[a]={period:Number(a)}; map[a][inp.dataset.k]=inp.value; });
+    await App.api('/api/periods', { method:'PUT', body:{ periods: Object.values(map) } });
+    App.toast('Periods saved');
+  });
+}
+</script>
+</body>
+</html>
