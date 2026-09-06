@@ -8,6 +8,7 @@ const { parse } = require('csv-parse/sync');
 const router = express.Router();
 const pool = require('../db');
 const cache = require('../cache');
+const { requireAdmin } = require('../middleware/auth');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 // all exams with term + year info
@@ -33,7 +34,7 @@ router.get('/', async (req, res) => {
 });
 
 // Upload or create exam setup rows. CSV columns: term,type,label.
-router.post('/import', upload.single('exam_file'), async (req, res) => {
+router.post('/import', requireAdmin, upload.single('exam_file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Choose a CSV exam file' });
     const records = parse(req.file.buffer.toString('utf8'), { columns: true, skip_empty_lines: true, trim: true });
@@ -87,7 +88,7 @@ router.get('/active', async (req, res) => {
 });
 
 // update exam state — supports { is_active, entry_open, published, label }
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const { is_active, entry_open, published, label } = req.body || {};
   const client = await pool.connect();
   try {
@@ -120,7 +121,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // create a new exam (admin)
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { term_id, type, label } = req.body || {};
   if (!term_id || !type) return res.status(400).json({ error: 'Term and type are required' });
   try {
@@ -134,7 +135,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM exams WHERE id=$1', [req.params.id]);
     return res.json({ ok: true });

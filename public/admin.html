@@ -16,6 +16,11 @@
   .slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
   .switch input:checked + .slider { background: var(--secondary); }
   .switch input:checked + .slider:before { transform: translateX(20px); }
+  .admin-home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .admin-home-card { display: block; text-align: left; border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .admin-home-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15,23,42,.1); }
+  .admin-home-card .admin-count { font-size: 28px; font-weight: 800; color: var(--primary); margin: 10px 0 4px; }
+  .admin-home-card .admin-action { color: var(--primary); font-size: 12px; font-weight: 700; }
 </style>
 </head>
 <body data-page="admin" style="display:flex;flex-direction:column;min-height:100vh;">
@@ -33,12 +38,13 @@
     </div>
   </div>
   <div class="admin-nav mb-2 no-print">
-    <div class="mini-tab active" data-sec="school">School</div>
-    <div class="mini-tab" data-sec="exams">Exams</div>
+    <div class="mini-tab active" data-sec="home">Admin home</div>
+    <div class="mini-tab" data-sec="exams">Current Exam</div>
     <div class="mini-tab" data-sec="classes">Classes</div>
     <div class="mini-tab" data-sec="subjects">Subjects</div>
     <div class="mini-tab" data-sec="teachers">Teachers</div>
     <div class="mini-tab" data-sec="students">Students</div>
+    <div class="mini-tab" data-sec="school">School</div>
     <div class="mini-tab" data-sec="periods">Periods</div>
   </div>
   <div id="content"><div class="loading-block">Loading…</div></div>
@@ -53,12 +59,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     t.classList.add('active');
     render(t.dataset.sec);
   }));
-  render('school');
+  render('home');
 });
 
 async function render(sec) {
   const c = document.getElementById('content');
   try {
+    if (sec === 'home') return renderAdminHome(c);
     if (sec === 'school') return renderSchool(c);
     if (sec === 'exams') return renderExams(c);
     if (sec === 'classes') return renderClasses(c);
@@ -69,6 +76,39 @@ async function render(sec) {
   } catch (err) {
     c.innerHTML = `<div class="alert alert-error">${App.escapeHtml(err.message)}</div>`;
   }
+}
+
+async function renderAdminHome(c) {
+  const [students, classes, teachers, subjects, exams] = await Promise.all([
+    App.api('/api/students'), App.api('/api/classes'), App.api('/api/teachers'),
+    App.api('/api/subjects'), App.api('/api/exams'),
+  ]);
+  const cards = [
+    ['students', 'Students', students.students.length, 'View students and add new records'],
+    ['classes', 'Classes', classes.classes.length, 'View classes and add new classes'],
+    ['teachers', 'Teachers', teachers.teachers.length, 'View teachers and add accounts'],
+    ['subjects', 'Subjects', subjects.subjects.length, 'View subjects and add subjects'],
+    ['exams', 'Current Exam', exams.exams.length, 'Set up, upload and manage exams'],
+  ];
+  c.innerHTML = `<div class="card">
+    <h2 class="card-title">Registration and Exam Setup</h2>
+    <p class="card-sub">Choose one area to view saved records or add new data. Each form saves directly to the system database.</p>
+    <div class="admin-home-grid">${cards.map(([sec, title, count, action]) => `
+      <button class="card admin-home-card" data-home-sec="${sec}">
+        <h3 class="section-title">${title}</h3>
+        <div class="admin-count">${count}</div>
+        <div class="text-muted text-small">saved records</div>
+        <div class="admin-action mt-1">${action} →</div>
+      </button>`).join('')}</div>
+  </div>
+  <div class="card mt-2"><h2 class="card-title">How this area works</h2>
+    <p class="card-sub">Students, classes, teachers and subjects each have their own list and add controls. Current Exam lets you create one exam or upload several from CSV, then activate mark entry and publish results.</p>
+  </div>`;
+  c.querySelectorAll('[data-home-sec]').forEach((button) => button.addEventListener('click', () => {
+    const section = button.dataset.homeSec;
+    document.querySelectorAll('.mini-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.sec === section));
+    render(section);
+  }));
 }
 
 // ─────────── SCHOOL ───────────
@@ -103,7 +143,9 @@ async function renderSchool(c) {
         <button class="btn btn-outline" id="logoBtn">Upload new logo</button>
         <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
         <h3 class="section-title">Grading Rubric</h3>
+        <div class="hint mb-1">Set the score range, rubric/band, grade and points for each score band.</div>
         <div id="rubricEditor" style="font-size:13px"></div>
+        <button class="btn btn-outline btn-sm mt-1" id="addRubricBand">+ Add grading band</button>
         <button class="btn btn-secondary mt-1" id="saveRubric">Save rubric</button>
         <div class="hint mt-1">These bands are used as the global default for all subjects.</div>
       </div>
@@ -142,23 +184,44 @@ async function renderSchool(c) {
 async function renderRubricEditor() {
   const init = App.state.init;
   const rubric = (init && init.default_rubric) || [];
-  document.getElementById('rubricEditor').innerHTML = rubric.map((b, i) => `
-    <div class="rubric-row" style="display:grid;grid-template-columns:52px 58px 58px 44px 1fr;gap:6px;margin-bottom:6px;">
-      <input value="${b.band}" data-r="${i}" data-k="band">
-      <input type="number" value="${b.min}" data-r="${i}" data-k="min">
-      <input type="number" value="${b.max}" data-r="${i}" data-k="max">
-      <input type="number" value="${b.points}" data-r="${i}" data-k="points">
-      <input value="${b.grade}" data-r="${i}" data-k="grade">
-    </div>`).join('');
+  document.getElementById('rubricEditor').innerHTML = `<div class="rubric-row" style="display:grid;grid-template-columns:72px 72px 100px 72px 72px 70px;gap:6px;margin-bottom:6px;font-weight:700;">
+    <span>Min score</span><span>Max score</span><span>Rubric</span><span>Grade</span><span>Points</span><span></span>
+  </div>${rubric.map((b, i) => rubricRow(b, i)).join('')}`;
+  document.getElementById('addRubricBand').onclick = () => {
+    const i = document.querySelectorAll('#rubricEditor .rubric-edit-row').length;
+    document.getElementById('rubricEditor').insertAdjacentHTML('beforeend', rubricRow({ min: 0, max: 0, band: '', grade: '', points: 0 }, i));
+  };
+}
+function rubricRow(b, i) {
+  return `<div class="rubric-edit-row" style="display:grid;grid-template-columns:72px 72px 100px 72px 72px 70px;gap:6px;margin-bottom:6px;align-items:center;">
+    <input type="number" min="0" max="100" value="${b.min}" data-r="${i}" data-k="min" aria-label="Minimum score">
+    <input type="number" min="0" max="100" value="${b.max}" data-r="${i}" data-k="max" aria-label="Maximum score">
+    <input value="${App.escapeHtml(b.band || b.label || '')}" data-r="${i}" data-k="band" aria-label="Rubric band">
+    <input value="${App.escapeHtml(b.grade || '')}" data-r="${i}" data-k="grade" aria-label="Grade">
+    <input type="number" min="0" value="${b.points}" data-r="${i}" data-k="points" aria-label="Points">
+    <button type="button" class="btn btn-danger btn-sm" data-remove-rubric="${i}">Remove</button>
+  </div>`;
 }
 document.addEventListener('click', async (e) => {
+  if (e.target.dataset.removeRubric !== undefined) {
+    e.target.closest('.rubric-edit-row').remove();
+    return;
+  }
   if (e.target.id === 'saveRubric') {
-    const rows = [...document.querySelectorAll('#rubricEditor input[data-r]')];
-    const map = {};
-    rows.forEach(inp => { const i = inp.dataset.r; if (!map[i]) map[i] = {}; map[i][inp.dataset.k] = inp.value; });
-    const rubric = Object.values(map);
+    const rubric = [...document.querySelectorAll('#rubricEditor .rubric-edit-row')].map((row) => {
+      const value = (key) => row.querySelector(`[data-k="${key}"]`).value;
+      return {
+        band: value('band'),
+        label: value('band'),
+        grade: value('grade'),
+        min: Number(value('min')),
+        max: Number(value('max')),
+        points: Number(value('points')),
+      };
+    }).filter((band) => band.band && Number.isFinite(band.min) && Number.isFinite(band.max));
+    if (!rubric.length) return App.toast('Add at least one valid grading band', 'warn');
     await App.api('/api/school', { method:'PUT', body: { rubric_global: rubric } });
-    App.toast('Rubric saved'); App.loadInit();
+    App.toast('Grading system saved'); await App.loadInit(); renderRubricEditor();
   }
 });
 
@@ -289,9 +352,10 @@ async function renderSubjects(c) {
             <div class="field"><label>Periods per week</label><input type="number" id="me_ppw" value="${s.periods_per_week}"></div>
             <div class="field"><label>Custom rubric (JSON) — leave blank for global</label><textarea id="me_rubric" rows="6" placeholder="[{\"band\":\"EE1\",\"min\":90,\"max\":100,\"points\":12,\"grade\":\"A\"}]">${App.escapeHtml(s.rubric && !s.uses_global ? JSON.stringify(s.rubric) : '')}</textarea></div>`,
       footer:`<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" id="me_save">Save</button>` });
-    c.querySelector('#me_save').addEventListener('click', async () => {
-      const rubricVal = c.querySelector('#me_rubric').value.trim();
-      const body = { full_name: c.querySelector('#me_name').value, periods_per_week: Number(c.querySelector('#me_ppw').value)||5 };
+    document.querySelector('.modal-backdrop #me_save').addEventListener('click', async () => {
+      const modal = document.querySelector('.modal-backdrop');
+      const rubricVal = modal.querySelector('#me_rubric').value.trim();
+      const body = { code: modal.querySelector('#me_code').value, full_name: modal.querySelector('#me_name').value, periods_per_week: Number(modal.querySelector('#me_ppw').value)||5 };
       if (rubricVal) { try { body.rubric = JSON.parse(rubricVal); } catch(e){ return App.toast('Invalid rubric JSON','error'); } }
       else body.rubric = null;
       await App.api('/api/subjects/'+s.id, { method:'PUT', body });

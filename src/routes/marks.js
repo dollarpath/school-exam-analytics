@@ -73,6 +73,9 @@ router.post('/', async (req, res) => {
     const examRes = await client.query('SELECT entry_open, published FROM exams WHERE id=$1', [exam_id]);
     const exam = examRes.rows[0];
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
+    if (!exam.entry_open || exam.published) {
+      return res.status(403).json({ error: exam.published ? 'This exam has been published' : 'Mark entry is closed for this exam' });
+    }
 
     await client.query('BEGIN');
 

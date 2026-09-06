@@ -42,21 +42,24 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const { full_name, periods_per_week, rubric } = req.body || {};
+  const { code, full_name, periods_per_week, rubric } = req.body || {};
   try {
     const r = await pool.query(
       `UPDATE subjects SET
-         full_name=COALESCE($1,full_name),
-         periods_per_week=COALESCE($2,periods_per_week),
-         rubric=$3
-       WHERE id=$4 RETURNING *`,
-      [full_name ? full_name.trim() : null,
+         code=COALESCE($1,code),
+         full_name=COALESCE($2,full_name),
+         periods_per_week=COALESCE($3,periods_per_week),
+         rubric=$4
+       WHERE id=$5 RETURNING *`,
+      [code ? code.trim().toUpperCase() : null,
+       full_name ? full_name.trim() : null,
        periods_per_week !== undefined ? Number(periods_per_week) : null,
        rubric === undefined ? null : (rubric ? JSON.stringify(rubric) : null),
        req.params.id]
     );
     return res.json({ subject: r.rows[0] });
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Subject code already exists' });
     return res.status(500).json({ error: 'Failed to update subject', detail: err.message });
   }
 });
